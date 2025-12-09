@@ -1,0 +1,83 @@
+src_en,mt_es,pe_es,Nature of change/Comments,hter_label
+app store [TAG] apps,tienda de aplicaciones[TAG],Tienda de aplicaciones[TAG] aplicaciones,Missing content,0.5
+tap 7 times on the background,toca 7 veces en el fondo de la pantalla,toca 7 veces el fondo de la pantalla,Ungrammatical.,0.125
+pair,vincular,sincronizar,As per glossary.,1.0
+Use [TAG] device to…,Usa [TAG] un dispositivo para…,Usa el dispositivo de [TAG] para…,Wrong placement of the tag.,0.6666666666666666
+This will link [TAG] device with yours.,Esto vinculará [TAG] dispositivo con tuyo.,Esto vinculará el dispositivo de [TAG] con el tuyo.,Wrong placement of the tag and missing article (ungrammatical sentence).,0.4444444444444444
+Screen time[TAG] hours,Tiempo de visualización[TAG] horas,Tiempo en pantalla: [TAG] horas,Wrong punctuation and missing space.,0.6
+Auto lock authentication of 2,Autocompletar autenticación Autenticación de Bloqueo automático de 2,Postediting changes are marked in blue,"Mistranslation, meaning has not been understood",1.0
+USB Secure Folder Mode,Modo de carpeta USB seguro Carpeta segura por USB,Postediting changes are marked in blue,"Mistranslation, meaning has not been understood",1.0
+"Turn on the device again, and if it reoccurs,contact the customer center (1544-0010).","Enciende el dispositivo nuevamente y, si se restablece vuelve a ocurrir, comunícate con el centro de atención al cliente (1544-0010).",Postediting changes are marked in blue,"Mistranslation, meaning has not been understood",2.6666666666666665
+Flip open & play media,Abrir la tapa y reproducir medios,Abrir la tapa y reproducir contenido multimedia,"Mistranslation, contextual",0.3333333333333333
+"Please note that if Family Space is uninstalled, the restrictions will be removed from the device.","Tenga Ten en cuenta que, si el Espacio familiar se desinstala Family Space, se desinstala, quitarán las restricciones se quitarán del dispositivo.",Postediting changes are marked in blue,Wrong tone of voice and terminology. Family Space should be kpet in English,1.1666666666666667
+Invalid code,Invalid code Código no valido,Postediting changes are marked in blue,Content not translated,1.0
+Go to My Family,Ir a mi familia,Ir a Mi familia,Capitalization as per source,0.5
+Different support to different people,Soporte diferente para Se adapta a diferentes personas,Postediting changes are marked in blue,"Mistranslation, meaning has not been understood",1.0
+See notifications when lock screen is off,Ve notificaciones cuando la pantalla de bloqueo está desactivada,Ver notificaciones cuando la pantalla de bloqueo está desactivada,Wrong tense,0.125
+"To let the Phone app use your mic, swipe down the top to open Quick Settings, then tap Mic Acess.","Para permitir que la aplicación del teléfono Teléfono utilice tu micrófono, desliza hacia arriba para abrir la configuración rápida los Ajustes rápidos y, luego, presiona Acceso al micrófono.",Postediting changes are marked in blue,"Mistranslation, meaning has not been understood",3.0
+DND,NO No interrumpir,Postediting changes are marked in blue,"Term to be translated, not understood by the engine",1.0
+"Please, connect to Wi-Fi and try to download again.",Conéctate a Wi-Fi e intenta descargar de nuevo.,Conéctate a una red Wi-Fi e intenta descargar el contenido de nuevo.,"Better fluency and object needed for ""descargar"" (transitive).",0.3333333333333333
+Change the lens,Cómo cambiar el lente,Cambiar el lente,Wrong meaning conveyed.,0.6666666666666666
+"Monitor your firmware security, get alerts and take action","Controla la seguridad del firmware, obtén alertas y responde","Controla la seguridad del firmware, recibe alertas y toma medidas",Not clear. More natural.,0.3
+Quickly call your contacts from your external display by adding them to favorites.,Llama rápidamente a tus contactos desde tu pantalla externa si los agregas a tus favoritos. ,Agrega contactos a tus favoritos para llamarlos rápidamente desde la pantalla externa.,Stylistic improvement,1.0833333333333333
+Stay connected,Mantente conectado,Conservar conexión,Gender neutral option.,1.0
+Can't connect to [TAG],No me puedo conectar a [TAG],No se puede establecer conexión con [TAG],First person is not appropiate here.,0.7142857142857143
+"To enable this feature for the required apps, go to App settings.
+","Para habilitar esta función para las aplicaciones requeridas, ve a Configuración de aplicación.","Si deseas habilitar esta función para las aplicaciones requeridas, ve a Ajustes de aplicaciones.","Incorrect terminology for ""Settings"" + other changes to improve fluency.",0.2857142857142857
+"When you enable USB transfer, Secure folder will be added as an option in USB settings.","Si habilitas la transferencia mediante USB, se agregará una carpeta segura como opción en la configuración de USB.","Si habilitas la transferencia mediante USB, se agregará una Carpeta segura como opción en los ajustes de USB.","Incorrect terminology for ""Settings"" + incorrect capitalization for ""Secure folder"" as per glossary.",0.16666666666666666
+"Enable USB transfer for Secure folder
+",Habilitar transferencia USB para carpeta segura,Habilitar transferencia USB para Carpeta segura,"Incorrect capitalization for ""Secure folder"" as per glossary.",0.16666666666666666
+"Move or copy files out of your secure folder
+",Mover o copiar archivos de la carpeta segura,Mover o copiar archivos fuera de tu carpeta segura,"Meaning conveyed by ""out"" was ignored by the MT.",0.2222222222222222
+"When you move files, they will be removed from their original folder.
+","Cuando mover los archivos, se quitarán de su carpeta original.","Cuando muevas archivos, se quitarán de su carpeta original.",Unconjugated verb.,0.2222222222222222
+"It doesn't look like you've received an invite.
+",No parece que ya recibiste una invitación.,No parece que hayas recibido una invitación.,Incorrect verb correlation.,0.2857142857142857
+"blocky
+
+",bloqueado,bloques,MT output doesn't follow the instructions provided in the reference material.,1.0
+"Lava
+",Lava,Anaglifo,MT output doesn't follow the instructions provided in the reference material.,1.0
+You're offline,Estás desconectado,No estás en línea.,"I know the glossary entry for ""offline"" is ""desconectado"", but it´s better to use a gender neutral option.",1.0
+CLI music,Música en pantalla externa,Música en la pantalla externa,Missing article.,0.2
+Family Space is not supported on this device,El espacio familiar no es compatible con este dispositivo,Family Space no es compatible con este dispositivo,Glossary not followed. Entry: Family Space.,0.375
+"Must have at least 8 characters, including at 1 letter and 1 number","Debe tener por lo menos 8 caracteres, incluida 1 letra y 1 número","Debe tener, por lo menos, 8 caracteres con 1 letra y 1 número incluidos.",Better fluency and missing punctuation.,0.35714285714285715
+Help your family's screen time,Ayuda al tiempo de pantalla de tu familia,Ayuda con el tiempo en pantalla de tu familia,Wrong meaning conveyed.,0.3333333333333333
+"In order to share location on Family Space, you will need to manually allow the permission on the app settings.","Para compartir tu ubicación en el Espacio familiar, tendrás que otorgar manualmente el permiso en la configuración de la aplicación.","Para compartir tu ubicación en Family Space, tendrás que otorgar manualmente el permiso en los ajustes de la aplicación.",Glossary not followed. Entries: Family Space and Ajustes.,0.2631578947368421
+"Invalid verification code, please ask for a new invite",Código de verificación no válido. Pídele una nueva invitación.,El código de verificación no es válido. Solicita una invitación nueva.,Better fluency.,0.5454545454545454
+try again,intenta nuevamente,intenta de nuevo,"Avoid unnecessary ""-mente"" adverb (nuevamente).",0.6666666666666666
+Code sent!,Código enviado,Código enviado.,Wrong punctuation.,0.5
+Please wait [TAG] seconds to resend.,Espera [TAG] segundos para enviar de nuevo.,Espera [TAG] segundos para enviarlo de nuevo.,"As ""Enviar"" is a transitive verb, a direct object is needed.",0.14285714285714285
+Set safe boundaries around your child's screen use,Establece límites seguros en el uso de la pantalla de tu hijo.,Establece límites seguros en el uso de la pantalla de tu hijo(a),"Wrong punctuation and it´s better not to assume the gender in ""child/hijo"".",0.08333333333333333
+Go online to start playing,Conéctate para empezar a jugar,Conéctate para empezar a reproducir contenido,Wrong meaning conveyed.,0.3333333333333333
+No permission!,Sin permisos,Sin permiso.,Wrong punctuation and singular needed.,0.5
+Rest PIN test,Prueba de PIN de reposo,Prueba de restablecimiento de PIN,Wrong meaning conveyed. There´s a mistake in source segment (Rest > Reset). Segment ID: string:reset_test,0.4
+Bad pixel test,Prueba de píxeles mala,Prueba de píxeles muertos,Mistranslation.,0.25
+Allows apps to read data from and interact with CLI Music app,Permite que las aplicaciones lean datos y interactúen con la aplicación CLI Music,Permite que las aplicaciones lean datos de la aplicación de música de la pantalla externa e interactúen con ella,Ungrammatical.,0.631578947368421
+Device was logged out,El dispositivo se cerró sesión,Se cerró sesión en el dispositivo,Wrong meaning conveyed.,1.0
+"Tap ""Use here"" to continue use in this device","Presiona ""Usar aquí"" para seguir usando el dispositivo.","Toca ""Usar aquí"" para seguir usándola en este dispositivo.",Wrong meaning conveyed.,0.4444444444444444
+[TAG] will have admin privileges so they can monitor & manage family devices,[TAG] tendrá privilegios administrativos para que puedan supervisar y administrar los dispositivos de su familia,"[TAG] tendrá privilegios de administrador. De esta manera, podrá supervisar y administrar los dispositivos de su familia",They here should not be translated as plural (it´s used as a gender-neutral option),0.35294117647058826
+You've reached the [TAG] person limit,Alcanzaste el límite de personas [TAG],Alcanzaste el límite de [TAG] personas,Wrong placement of the tag.,0.3333333333333333
+"Clock face
+",carátula del reloj,cara de reloj,As per glossary.,0.6666666666666666
+Quick settings,configuración rápida,ajustes rápidos,As per glossary.,1.0
+Device integrity,integración del dispositivo,integridad del dispositivo,Mistranslation. Wrong meaning conveyed.,0.3333333333333333
+keys,teclas,claves,Wrong meaning conveyed.,1.0
+resumes when lower than 20%,se reanudará cuando se encuentre por menos del 20 %.,se reanudará cuando esté por debajo del 20 %.,More natural. Fluency.,0.3333333333333333
+"3800mAh non-removable
+",3800mAh no extraíble,"3,800 mAh no extraíble",Ungrammatical change. Unit/number incorrectly rendered.,0.5
+"If you try to make an emergency call, your device will automatically use the mobile network.","Si intenta realizar una llamada de emergencia, el dispositivo utilizará automáticamente la red móvil.","Si intentas realizar una llamada de emergencia, el dispositivo utilizará automáticamente la red móvil.",Incorrect formal register instead of informal.,0.07142857142857142
+Flex your style,Flexiona tu estilo,Luce tu estilo,Unnatural sentence that doesn't convey any meaning in Spanish. Creative translation needed.,0.3333333333333333
+"
+OSAndroid™ 13 + 3 upgradesMem / Storage8GB/256GBChipsetSnapdragon 7 Gen 1 Mobile Platform",OSAndroid™ 13 + 3 actualizacionesMem / Storage8 GB/256 GBChipsetSnapdragon 7 Gen 1 Mobile Platform,SOAndroid™ 13 + 3 actualizacionesMemoria/almacenamiento8 GB/256 GBChipsetSnapdragon 7 Gen 1 Mobile Platform,Untranslated text.,0.3333333333333333
+"DesignOne-of-a-kindfoldable design
+",DiseñoDiseño intercambiableuno de los bordes de pantalla,DiseñoDiseño plegableúnico,Wrong and senseless meaning.,3.0
+CamerasHigh-res cams forsharper photos,Cámarasde alta resolución parafotos más nítidas,CámarasCámaras de alta resolución parafotos más nítidas,Incomplete sentence.,0.2857142857142857
+"Main6.9"" FHD+ pOLED 165Hz display(2640 x 1080) | 413ppiExternal1.5"" OLED display(194 x 368) | 282ppi
+","Pantalla principal6.9"" FHD+ pOLED de 165 Hz (2600 x 1080) | 413 ppiExterna1.5"" OLED de (194 x 368) | 282 ppi","Pantalla principal6.9"" FHD+ pOLED de 165 Hz (2640 x 1080) | 413 ppiExterna1.5"" OLED de (194 x 368) | 282 ppi",Wrong number converted.,0.047619047619047616
+"Try again later\.\.\.
+",Intenta de nuevo más tarde.\.\.,Intenta de nuevo más tarde\.\.\.,Wrong punctuation placement.,0.2
+Logging out of Family Space,Cerrando sesión del espacio familiar...,Cerrando sesión del Family Space...,Family Space should be kept in English as per glossary,0.4
+"To allow access, go to settings","Para permitir el acceso, ve a Configuración.","Para permitir el acceso, ve a Ajustes.",Settings should be Ajustes as per glossary,0.14285714285714285
+Jump right in!,¡Saltar hacia la derecha!,¡Comienza ahora mismo!,Mistranslation/Accuracy,1.3333333333333333
+Onboarding tutorials,Tutoriales de inclución ,Tutoriales de introducción,Mistranslation/Accuracy,0.3333333333333333
