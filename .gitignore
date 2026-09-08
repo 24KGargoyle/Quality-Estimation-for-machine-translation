@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+
+# Backend secrets / local env
+app/backend/.env
+app/backend/*.env
+!app/backend/.env.example
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+app/frontend/.env.local
+app/frontend/.env
+!app/frontend/.env.example
+
+# OS / editor
+.DS_Store
+*.log
