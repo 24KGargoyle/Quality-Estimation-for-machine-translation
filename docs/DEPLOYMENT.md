@@ -1,8 +1,10 @@
 # Deployment
 
-## Local development (exact commands used to build/verify this platform)
+No Docker is used for this platform — it runs directly with a local Postgres install, a Python
+virtualenv for the backend, and Node/npm for the frontend. These are the exact commands used to
+build and verify it.
 
-### 1. Database
+## 1. Database
 
 ```bash
 # Postgres 16 + pgvector must be running and reachable.
@@ -13,7 +15,10 @@ sudo -u postgres psql -c "CREATE DATABASE meeting_intel OWNER meeting_intel;"
 sudo -u postgres psql -d meeting_intel -c "CREATE EXTENSION IF NOT EXISTS vector;"
 ```
 
-### 2. Backend
+On macOS: `brew install postgresql@16 pgvector` (or build pgvector from source against a
+Postgres.app install). On Windows: run the above under WSL2.
+
+## 2. Backend
 
 ```bash
 cd app/backend
@@ -26,7 +31,12 @@ uvicorn meeting_intel.main:app --app-dir src --reload --port 8000
 
 Health check: `curl http://localhost:8000/health` → `{"status":"ok", "graph_configured":..., "llm_configured":..., "auth_provider":...}`.
 
-### 3. Frontend
+`sentence-transformers` (used for local embeddings) pulls in PyTorch — a sizeable dependency
+(roughly 1-2GB on first install). If that's a problem, `embeddings/embedder.py`'s two functions
+(`embed_texts`/`embed_query`) can be swapped for a hosted embeddings API call without touching
+any caller.
+
+## 3. Frontend
 
 ```bash
 cd app/frontend
@@ -37,7 +47,7 @@ npm run dev
 
 Open `http://localhost:3000`.
 
-### 4. Tests
+## 4. Tests
 
 ```bash
 cd app/backend
@@ -46,17 +56,6 @@ sudo -u postgres psql -d meeting_intel_test -c "CREATE EXTENSION IF NOT EXISTS v
 source .venv/bin/activate
 python -m pytest -q
 ```
-
-## Docker Compose (local, all-in-one)
-
-```bash
-cd app
-cp backend/.env.example backend/.env   # fill in secrets
-docker compose up --build
-```
-
-Brings up `postgres` (pgvector image), `backend` (runs migrations on startup, then serves on
-`:8000`), and `frontend` (`:3000`). See `app/docker-compose.yml`.
 
 ## Configuring real Microsoft Entra ID / Graph
 
@@ -73,19 +72,32 @@ Set `ANTHROPIC_API_KEY` in `app/backend/.env`. `LLM_MODEL` defaults to `claude-s
 Without a key, chat/discussion/decision endpoints degrade gracefully (explicit "AI model is not
 configured" message) rather than crashing or fabricating answers — see `IMPLEMENTATION_REPORT.md`.
 
+## Running as long-lived services (production-ish, still no Docker)
+
+- **Backend**: run `alembic upgrade head` as a release step, then serve with
+  `uvicorn meeting_intel.main:app --host 0.0.0.0 --port 8000` (drop `--reload`) under a process
+  supervisor — `systemd`, `supervisord`, or a process manager like `pm2`. Put a reverse proxy
+  (nginx, Caddy) in front for TLS.
+- **Frontend**: `npm run build && npm run start` (Next.js's own production server), also under a
+  supervisor, behind the same reverse proxy.
+- **Database**: a managed Postgres instance with the `pgvector` extension available (e.g. Azure
+  Database for PostgreSQL, Amazon RDS with the `pgvector` extension enabled, or a self-managed
+  instance) rather than the local install used above.
+
 ## Production notes / gaps to close before a real rollout
 
-- **WebSocket fan-out** (`realtime/ws_manager.py`) is in-process; a multi-instance deployment
-  needs a shared layer (Redis pub/sub or equivalent) so a message posted via one instance
-  reaches a client connected to another.
+- **WebSocket fan-out** (`realtime/ws_manager.py`) is in-process; running more than one backend
+  instance needs a shared layer (Redis pub/sub or equivalent) so a message posted via one
+  instance reaches a client connected to another.
 - **Transcript storage**: raw VTT text is stored inline in `meeting_transcripts.storage_ref`
   (Postgres `TEXT`) for this scope; a production deployment should move this to blob storage
   (e.g. Azure Blob Storage, matching the Teams-native ecosystem) and store a reference instead.
 - **Embeddings model**: `sentence-transformers/all-MiniLM-L6-v2` runs locally (no external API
-  key), which increases the backend container's size/cold-start time. A hosted embeddings API
-  can be swapped in behind `embeddings/embedder.py`'s two functions without touching callers.
-- **Secrets**: use the platform's secret manager (Azure Key Vault, AWS Secrets Manager, etc.) to
-  inject `SECRET_KEY`, `MS_CLIENT_SECRET`, `ANTHROPIC_API_KEY` as environment variables at
-  deploy time — never bake them into the image.
-- **Database migrations**: `alembic upgrade head` runs automatically on backend container start
-  (see `Dockerfile` `CMD`); for a multi-instance rollout, run it once as a release step instead.
+  key), at the cost of the PyTorch dependency size/install time noted above. A hosted embeddings
+  API can be swapped in behind `embeddings/embedder.py`'s two functions without touching callers.
+- **Secrets**: use the platform's secret manager (Azure Key Vault, AWS Secrets Manager, a `.env`
+  injected by the supervisor, etc.) to provide `SECRET_KEY`, `MS_CLIENT_SECRET`,
+  `ANTHROPIC_API_KEY` as environment variables at deploy time — never commit them.
+- **Database migrations**: run `alembic upgrade head` as an explicit release step before starting
+  new backend processes, rather than automatically on every process start, once there's more than
+  one backend instance.

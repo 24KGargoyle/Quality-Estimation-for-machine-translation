@@ -158,6 +158,7 @@ backend venv + migrations + uvicorn, frontend npm install + dev server, test dat
 
 ## 15. Deployment instructions
 
-See `docs/DEPLOYMENT.md` §"Docker Compose" (`cd app && docker compose up --build`) and
-§"Configuring real Microsoft Entra ID / Graph" for what's needed to go from this dev-auth,
+No Docker is used. See `docs/DEPLOYMENT.md` §"Running as long-lived services" for the non-Docker
+production process setup (uvicorn/systemd + Next.js build + reverse proxy + managed Postgres),
+and §"Configuring real Microsoft Entra ID / Graph" for what's needed to go from this dev-auth,
 Graph-unconfigured state to a real production deployment.

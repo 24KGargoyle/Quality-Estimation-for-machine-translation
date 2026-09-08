@@ -56,8 +56,10 @@ app/
     src/app/          Next.js App Router pages (dashboard, meetings, groups, search, feedback, settings)
     src/components/   Chat message, share-to-group modal, nav, auth guard
     src/lib/          API client, auth context, shared TS types
-  docker-compose.yml
 ```
+
+No Docker is used — see `docs/DEPLOYMENT.md` for the local-process setup (Postgres install,
+Python venv, `npm run dev`/`npm run start`).
 
 ## Why this stack
 
