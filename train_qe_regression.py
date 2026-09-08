@@ -87,7 +87,7 @@ def main(infile, model_out_dir, epochs, batch_size, lr):
 
     training_args = TrainingArguments(
         output_dir=model_out_dir,
-        evaluation_strategy="epoch" if "evaluation_strategy" in TrainingArguments.__init__.__code__.co_varnames else "no",
+        eval_strategy="epoch",
         learning_rate=lr,
         per_device_train_batch_size=batch_size,
         per_device_eval_batch_size=batch_size,
@@ -103,7 +103,7 @@ def main(infile, model_out_dir, epochs, batch_size, lr):
         args=training_args,
         train_dataset=tokenized_train,
         eval_dataset=tokenized_eval,
-        tokenizer=tokenizer,
+        processing_class=tokenizer,
         compute_metrics=compute_metrics,
     )
 

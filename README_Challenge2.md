@@ -33,6 +33,11 @@ python build_qe_labels.py
 python train_qe_regression.py
 ```
 
+`requirements.txt` pins are verified working end-to-end (both scripts run successfully) on
+Python 3.11 and Python 3.14. `train_qe_regression.py`'s `Trainer`/`TrainingArguments` calls use
+current `transformers` argument names (`eval_strategy`, `processing_class`) and require the
+`accelerate` package, both included in `requirements.txt`.
+
 ## 💡 Future Improvements
 - Use COMET-QE or QE-tuned models  
 - Increase dataset size  

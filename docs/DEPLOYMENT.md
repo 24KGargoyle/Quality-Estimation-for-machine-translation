@@ -29,6 +29,15 @@ alembic upgrade head
 uvicorn meeting_intel.main:app --app-dir src --reload --port 8000
 ```
 
+`pyproject.toml` declares `requires-python = ">=3.11"`. The full test suite (30 tests) was
+verified passing on both Python 3.11.15 and Python 3.14.7 with the exact pins in
+`requirements.txt` — `asyncpg`, `pydantic`/`pydantic-core`, `pydantic-settings`, and `sqlalchemy`
+are pinned at versions confirmed to ship 3.14 wheels/support (older pins built cleanly on 3.11
+but failed to build from source on 3.14, since no prebuilt wheel existed for those versions
+there). `psycopg2-binary` and `aiosqlite` were removed — the app only ever uses the async
+`asyncpg` driver, and those two packages were unused dead weight (the former also has no 3.14
+wheel for the pinned version, which is what surfaced the issue).
+
 Health check: `curl http://localhost:8000/health` → `{"status":"ok", "graph_configured":..., "llm_configured":..., "auth_provider":...}`.
 
 `sentence-transformers` (used for local embeddings) pulls in PyTorch — a sizeable dependency
