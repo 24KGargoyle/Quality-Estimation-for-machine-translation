@@ -30,8 +30,17 @@ timestamps through chunking, and the DB row keeps them alongside the embedding.
 ## Retrieval
 
 `retrieval/hybrid_search.py` combines:
-- **Vector search**: pgvector cosine distance (`embedding <=> query_vector`) via an HNSW index.
-- **Keyword search**: Postgres full-text (`tsv @@ plainto_tsquery(...)`, ranked by `ts_rank_cd`).
+- **Vector search**: cosine similarity computed in Python — candidate chunks for the given
+  `meeting_ids`/`speaker` are loaded from Postgres (`embedding` stored as plain JSON), stacked
+  into a numpy matrix, and scored against the query embedding with a single dot product (both
+  are unit-normalized, so dot product == cosine similarity). Deliberately **not** the `pgvector`
+  Postgres extension: it has no plain installer on Windows (needs compiling from source with
+  MSVC), which would otherwise force Docker or WSL2 onto Windows contributors just to run this
+  app. This trades a DB-side ANN index for a simpler dependency footprint — fine at
+  meeting-transcript scale (a search scope is at most a few hundred chunks), not for a corpus of
+  millions of chunks (see `docs/DEPLOYMENT.md` "Production notes").
+- **Keyword search**: Postgres full-text (`tsv @@ plainto_tsquery(...)`, ranked by `ts_rank_cd`)
+  — this part *is* still done in the database; it's a stock Postgres feature, no extension needed.
 - **Fusion**: Reciprocal Rank Fusion (`score = Σ 1/(60+rank)` across whichever list(s) a chunk
   appears in) — a standard, parameter-light way to combine two heterogeneous rankings without
   needing to calibrate raw score scales against each other.

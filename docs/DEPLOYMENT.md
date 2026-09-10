@@ -7,16 +7,18 @@ build and verify it.
 ## 1. Database
 
 ```bash
-# Postgres 16 + pgvector must be running and reachable.
-sudo apt-get install -y postgresql-16-pgvector   # if not already installed
+# Plain PostgreSQL 16 — no extension needed. This app does not use the `pgvector`
+# Postgres extension: it has no plain installer on Windows (has to be compiled from
+# source with MSVC), which would otherwise force Docker or WSL2 on Windows machines.
+# Embedding similarity is computed in Python instead (numpy) — see docs/RAG_ARCHITECTURE.md.
+sudo apt-get install -y postgresql-16   # if not already installed
 sudo service postgresql start
 sudo -u postgres psql -c "CREATE USER meeting_intel WITH PASSWORD 'meeting_intel' CREATEDB;"
 sudo -u postgres psql -c "CREATE DATABASE meeting_intel OWNER meeting_intel;"
-sudo -u postgres psql -d meeting_intel -c "CREATE EXTENSION IF NOT EXISTS vector;"
 ```
 
-On macOS: `brew install postgresql@16 pgvector` (or build pgvector from source against a
-Postgres.app install). On Windows: run the above under WSL2.
+On macOS: `brew install postgresql@16`. On Windows: install PostgreSQL with the official
+EDB installer (postgresql.org/download/windows) — no WSL2, no Docker, no compiling anything.
 
 ## 2. Backend
 
@@ -61,7 +63,6 @@ Open `http://localhost:3000`.
 ```bash
 cd app/backend
 sudo -u postgres psql -c "CREATE DATABASE meeting_intel_test OWNER meeting_intel;"
-sudo -u postgres psql -d meeting_intel_test -c "CREATE EXTENSION IF NOT EXISTS vector;"
 source .venv/bin/activate
 python -m pytest -q
 ```
@@ -89,9 +90,9 @@ configured" message) rather than crashing or fabricating answers — see `IMPLEM
   (nginx, Caddy) in front for TLS.
 - **Frontend**: `npm run build && npm run start` (Next.js's own production server), also under a
   supervisor, behind the same reverse proxy.
-- **Database**: a managed Postgres instance with the `pgvector` extension available (e.g. Azure
-  Database for PostgreSQL, Amazon RDS with the `pgvector` extension enabled, or a self-managed
-  instance) rather than the local install used above.
+- **Database**: a managed Postgres instance (e.g. Azure Database for PostgreSQL, Amazon RDS, or
+  a self-managed instance) rather than the local install used above — no extension requirement
+  to worry about, since this app uses plain Postgres.
 
 ## Production notes / gaps to close before a real rollout
 
@@ -104,6 +105,11 @@ configured" message) rather than crashing or fabricating answers — see `IMPLEM
 - **Embeddings model**: `sentence-transformers/all-MiniLM-L6-v2` runs locally (no external API
   key), at the cost of the PyTorch dependency size/install time noted above. A hosted embeddings
   API can be swapped in behind `embeddings/embedder.py`'s two functions without touching callers.
+- **Vector similarity**: computed in Python (numpy) rather than via the `pgvector` Postgres
+  extension, which has no plain installer on Windows — see docs/RAG_ARCHITECTURE.md. This is
+  fine at meeting-transcript scale (at most a few hundred chunks per search scope) but doesn't
+  scale to millions of chunks; re-introducing `pgvector` (or a dedicated vector DB) behind
+  `retrieval/hybrid_search.py`'s existing interface is the fix if that scale is ever reached.
 - **Secrets**: use the platform's secret manager (Azure Key Vault, AWS Secrets Manager, a `.env`
   injected by the supervisor, etc.) to provide `SECRET_KEY`, `MS_CLIENT_SECRET`,
   `ANTHROPIC_API_KEY` as environment variables at deploy time — never commit them.

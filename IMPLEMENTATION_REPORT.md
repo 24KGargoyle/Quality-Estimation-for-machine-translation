@@ -93,8 +93,9 @@ WebSocket), `/api/messages/{id}/share`, `/api/messages/{id}/feedback`, `/api/fee
 ## 6. Database changes
 
 New schema (20 tables) — see `docs/DATABASE.md`. Two Alembic migrations: initial schema
-(all tables + `pgvector` extension) and full-text-search/vector-index (`tsv` generated column +
-GIN index, HNSW cosine index on `transcript_chunks.embedding`).
+(all tables, plain PostgreSQL, no extensions) and full-text-search (`tsv` generated column +
+GIN index on `transcript_chunks`). `embedding` is a plain JSON column — no `pgvector` extension,
+since it has no plain installer on Windows (see §9 and `docs/RAG_ARCHITECTURE.md`).
 
 ## 7. Microsoft Graph permissions
 
@@ -111,8 +112,10 @@ detail in `docs/AGENT_ARCHITECTURE.md`. No general multi-agent framework used, b
 
 ## 9. Search architecture
 
-Hybrid: pgvector cosine (HNSW index) + Postgres full-text (`tsvector`/GIN), fused via Reciprocal
-Rank Fusion, filtered by mandatory `meeting_ids` + optional `speaker`. Full detail in
+Hybrid: cosine similarity computed in Python (numpy) + Postgres full-text (`tsvector`/GIN),
+fused via Reciprocal Rank Fusion, filtered by mandatory `meeting_ids` + optional `speaker`.
+Vector similarity is deliberately not done via the `pgvector` Postgres extension — it has no
+plain installer on Windows and would otherwise force Docker/WSL2 there. Full detail in
 `docs/RAG_ARCHITECTURE.md`.
 
 ## 10. Security implementation
@@ -128,7 +131,7 @@ stack traces). Full detail in `docs/SECURITY.md`, verified by `tests/integration
 - 15 unit tests (transcript parsing, chunking, meeting router, prompt/grounding/citation logic,
   decision-response parsing) — no database.
 - 9 integration tests (meeting ingestion incl. an idempotency regression test, authorization) —
-  real Postgres + pgvector.
+  real (plain) Postgres.
 - 1 end-to-end test covering the full acceptance-criteria flow at the API level.
 - 1 manual full-browser Playwright walkthrough (login → load meeting → ask → follow-up →
   feedback → discuss with group → real-time group AI reply → decision check), which caught and
@@ -141,7 +144,10 @@ Run: `cd app/backend && source .venv/bin/activate && python -m pytest -q`.
 See §2/§3 above, plus: WebSocket delivery is best-effort in-process (no persistence/replay of
 missed frames — REST `GET .../messages` is the source of truth on reconnect); duration display
 rounds to whole minutes (cosmetic, shows "0 minutes" for very short demo transcripts); no
-pagination on list endpoints (fine at this scale, would need it for large tenants).
+pagination on list endpoints (fine at this scale, would need it for large tenants); vector
+similarity is computed in Python rather than via a DB-side ANN index (deliberate — see §9 — but
+means it won't scale to a corpus of millions of chunks without re-introducing `pgvector` or a
+dedicated vector DB behind the same `hybrid_search()` interface).
 
 ## 13. Future improvements
 
@@ -153,8 +159,9 @@ cross-meeting phrasing).
 
 ## 14. Exact commands to run locally
 
-See `docs/DEPLOYMENT.md` §"Local development" for the full sequence (Postgres+pgvector setup,
-backend venv + migrations + uvicorn, frontend npm install + dev server, test database + pytest).
+See `docs/DEPLOYMENT.md` §"Local development" for the full sequence (plain Postgres setup — no
+extensions, no WSL2, no Docker — backend venv + migrations + uvicorn, frontend npm install + dev
+server, test database + pytest).
 
 ## 15. Deployment instructions
 

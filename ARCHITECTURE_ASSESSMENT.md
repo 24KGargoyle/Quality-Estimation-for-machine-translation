@@ -43,11 +43,14 @@ chat), first-class Pydantic schemas (typed API contracts, required by the spec),
 SQLAlchemy/Alembic ecosystem, native WebSocket support, and it keeps the whole repo in Python
 so the same virtualenv/tooling conventions apply across the QE scripts and the new platform.
 
-**Database:** PostgreSQL with the `pgvector` extension. Rather than standing up a second piece
-of infrastructure (a dedicated vector DB) purely for embeddings, `pgvector` lets one Postgres
-instance serve both the relational schema (users, meetings, conversations, feedback, …) and the
-`transcript_chunks.embedding` column used for semantic search, combined with Postgres full-text
-search (`tsvector`) for keyword search — this is the hybrid retrieval layer.
+**Database:** plain PostgreSQL, no extensions. This was originally planned with the `pgvector`
+extension (one Postgres instance serving both the relational schema and vector search), but
+that was revised after a Windows contributor confirmed they'd only be developing in VS Code —
+no WSL2, no Docker — and `pgvector` has no plain Windows installer; it has to be compiled from
+source with MSVC. `transcript_chunks.embedding` is stored as plain JSON instead, and cosine
+similarity is computed in Python (numpy) at query time. Postgres full-text search (`tsvector`)
+still handles the keyword half of the hybrid retrieval layer — that's a stock feature, no
+extension needed. See `docs/RAG_ARCHITECTURE.md` for the tradeoff this makes.
 
 **Embeddings:** a local `sentence-transformers` model (`all-MiniLM-L6-v2`) is used for
 vectorization. This avoids a hard dependency on a paid embeddings API key while still being a
@@ -92,15 +95,19 @@ so group chat, "Discuss with Group", and agent participation are not coupled to 
 
 ## 4. Migration Requirements
 
-None — this is additive. No existing QE files are modified, moved, or deleted.
+Mostly additive. One later exception: when Python 3.14 support was requested for both this
+platform and the pre-existing QE-for-MT scripts, `train_qe_regression.py` needed two small
+fixes for current `transformers`/`accelerate` versions (`Trainer`/`TrainingArguments` argument
+renames), and a root-level `requirements.txt` was added since the QE scripts had none despite
+`README_Challenge2.md` referencing one. No QE data files or notebooks were touched.
 
 ## 5. Implementation Phases (as executed)
 
 1. Foundation: repo layout, config, DB schema/migrations, auth (dev + Entra scaffold), API skeleton.
 2. Teams meeting ingestion: Graph client abstraction, meeting lookup + authorization, transcript
    parsing, speaker/timestamp preservation, background indexing pipeline.
-3. Meeting intelligence: hybrid retrieval (pgvector + tsvector + metadata filters), grounded
-   answer agent, strict meeting isolation, citations.
+3. Meeting intelligence: hybrid retrieval (Python-side cosine similarity + tsvector + metadata
+   filters), grounded answer agent, strict meeting isolation, citations.
 4. Private chat: conversation persistence, streaming answers, follow-up context resolution.
 5. Feedback: 👍/👎 + reason capture, feedback table, evaluation-dataset export script.
 6. Group collaboration: groups, WebSocket real-time chat, "Discuss with Group" context sharing,

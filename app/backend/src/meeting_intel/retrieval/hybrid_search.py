@@ -6,11 +6,20 @@ searches beyond the ids it is given. Cross-meeting search is therefore only
 possible when the caller explicitly passes more than one meeting id, which
 only happens when `agents.meeting_router` detects an explicit cross-meeting
 request (see docs/RAG_ARCHITECTURE.md).
+
+Vector similarity is computed in Python (numpy dot product over normalized
+embeddings, i.e. cosine similarity) rather than in the database — this app
+intentionally has no dependency on the `pgvector` Postgres extension, which
+has no plain installer on Windows and would otherwise force Docker/WSL2 on
+Windows contributors. See docs/RAG_ARCHITECTURE.md for the tradeoff this
+makes against a DB-side ANN index (fine at meeting-transcript scale — at
+most a few hundred chunks per meeting/search scope).
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 
+import numpy as np
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -44,9 +53,9 @@ async def hybrid_search(
     if not meeting_ids:
         return []
     top_k = top_k or settings.retrieval_top_k
-    query_vector = embed_query(query)
+    query_vector = np.array(embed_query(query), dtype=np.float32)
 
-    vector_stmt = select(TranscriptChunk).where(TranscriptChunk.meeting_id.in_(meeting_ids))
+    candidates_stmt = select(TranscriptChunk).where(TranscriptChunk.meeting_id.in_(meeting_ids))
     keyword_stmt = (
         select(TranscriptChunk)
         .where(TranscriptChunk.meeting_id.in_(meeting_ids))
@@ -54,16 +63,24 @@ async def hybrid_search(
         .params(kw=query)
     )
     if speaker:
-        vector_stmt = vector_stmt.where(func.lower(TranscriptChunk.speaker) == speaker.lower())
+        candidates_stmt = candidates_stmt.where(func.lower(TranscriptChunk.speaker) == speaker.lower())
         keyword_stmt = keyword_stmt.where(func.lower(TranscriptChunk.speaker) == speaker.lower())
 
-    vector_stmt = vector_stmt.order_by(TranscriptChunk.embedding.cosine_distance(query_vector)).limit(top_k * 3)
     keyword_stmt = keyword_stmt.order_by(
         text("ts_rank_cd(tsv, plainto_tsquery('english', :kw)) DESC")
     ).params(kw=query).limit(top_k * 3)
 
-    vector_rows = (await db.execute(vector_stmt)).scalars().all()
+    candidates = (await db.execute(candidates_stmt)).scalars().all()
     keyword_rows = (await db.execute(keyword_stmt)).scalars().all()
+
+    embedded = [c for c in candidates if c.embedding]
+    if embedded:
+        matrix = np.array([c.embedding for c in embedded], dtype=np.float32)
+        similarities = matrix @ query_vector
+        order = np.argsort(-similarities)[: top_k * 3]
+        vector_rows = [embedded[i] for i in order]
+    else:
+        vector_rows = []
 
     fused: dict[str, RetrievedChunk] = {}
     for rank, chunk in enumerate(vector_rows, start=1):

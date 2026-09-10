@@ -12,7 +12,6 @@ import enum
 import uuid
 from datetime import datetime
 
-from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     JSON,
     Boolean,
@@ -30,10 +29,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from meeting_intel.config import get_settings
 from meeting_intel.db.base import Base
-
-_settings = get_settings()
 
 
 def _uuid() -> str:
@@ -157,7 +153,11 @@ class TranscriptChunk(Base, UUIDPk, TimestampMixin):
     start_seconds: Mapped[float] = mapped_column(Float)
     end_seconds: Mapped[float] = mapped_column(Float)
     text: Mapped[str] = mapped_column(Text)
-    embedding: Mapped[list[float] | None] = mapped_column(Vector(_settings.embedding_dim), nullable=True)
+    # Stored as plain JSON (a list of floats) rather than a pgvector column so this app
+    # needs nothing beyond stock PostgreSQL — no extension to install/compile. Cosine
+    # similarity is computed in Python at query time (retrieval/hybrid_search.py); see
+    # docs/RAG_ARCHITECTURE.md for the tradeoff this makes against a DB-side ANN index.
+    embedding: Mapped[list[float] | None] = mapped_column(JSON, nullable=True)
 
 
 # --------------------------------------------------------------------------

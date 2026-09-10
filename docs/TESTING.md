@@ -2,9 +2,9 @@
 
 ## What's covered
 
-`app/backend/tests/`, run with `pytest` against a real Postgres + pgvector database (not
-mocked/sqlite — the schema depends on pgvector and native full-text search, which sqlite can't
-provide). 30 tests, all passing as of this writing.
+`app/backend/tests/`, run with `pytest` against a real (plain) Postgres database, not
+mocked/sqlite — the schema depends on native full-text search (`tsvector`/GIN), which sqlite
+doesn't provide. 30 tests, all passing as of this writing.
 
 ### Unit (`tests/unit/`, no database)
 
@@ -59,7 +59,6 @@ unconditionally created a new `meeting_transcripts` row even when one already ex
 ```bash
 cd app/backend
 sudo -u postgres psql -c "CREATE DATABASE meeting_intel_test OWNER meeting_intel;"
-sudo -u postgres psql -d meeting_intel_test -c "CREATE EXTENSION IF NOT EXISTS vector;"
 source .venv/bin/activate
 python -m pytest -q
 ```

@@ -26,9 +26,10 @@ See `ARCHITECTURE_ASSESSMENT.md` at the repo root for the pre-implementation ass
                          └────────────┬─────────────┘
                                       │
                          ┌────────────▼─────────────┐
-                         │ PostgreSQL + pgvector     │
-                         │ (relational + vector +    │
-                         │  full-text search)        │
+                         │ PostgreSQL (plain)        │
+                         │ (relational + full-text;  │
+                         │  vector similarity done   │
+                         │  in Python, not the DB)   │
                          └───────────────────────────┘
 ```
 
@@ -65,9 +66,10 @@ Python venv, `npm run dev`/`npm run start`).
 
 - **FastAPI**: async-native, typed request/response schemas (Pydantic), native WebSocket
   support, mature SQLAlchemy/Alembic ecosystem.
-- **PostgreSQL + pgvector**: one database serves the relational schema *and* vector search
-  (via `pgvector`) *and* keyword search (via native `tsvector`/GIN), avoiding a second piece
-  of search infrastructure for this scope.
+- **Plain PostgreSQL**: one database serves the relational schema *and* keyword search (via
+  native `tsvector`/GIN). Vector similarity is computed in Python (numpy) rather than via the
+  `pgvector` extension, which has no plain installer on Windows and would otherwise force
+  Docker/WSL2 there — see `docs/RAG_ARCHITECTURE.md`.
 - **sentence-transformers (local)**: real embeddings without a mandatory paid API key.
 - **Anthropic Claude**: the LLM used for grounded answers, discussion assistance, and
   decision/action-item extraction, via the official `anthropic` SDK.
@@ -81,9 +83,9 @@ Python venv, `npm run dev`/`npm run start`).
 3. `agents/meeting_router` decides retrieval scope (single meeting, unless the question is an
    explicit cross-meeting request) and extracts a speaker filter if the question names a
    participant.
-4. `retrieval/hybrid_search` runs vector (pgvector cosine) + keyword (Postgres full-text) search
-   over `transcript_chunks`, fused via reciprocal rank fusion, filtered by meeting id(s) and
-   speaker.
+4. `retrieval/hybrid_search` runs vector (numpy cosine similarity, computed in Python) +
+   keyword (Postgres full-text) search over `transcript_chunks`, fused via reciprocal rank
+   fusion, filtered by meeting id(s) and speaker.
 5. `agents/answer_agent` builds a grounded prompt (`agents/prompts.py`) from the retrieved
    excerpts + conversation history and calls the LLM. The model must cite excerpts as `[S1]`,
    `[S2]`, …; citations are mapped back to the exact chunk metadata (speaker/timestamp) — never
@@ -98,3 +100,5 @@ Python venv, `npm run dev`/`npm run start`).
 - Microsoft Graph / Teams integration code paths are real but unexercised against a live tenant
   in this environment (no Azure AD app registration available) — see
   `docs/MICROSOFT_GRAPH_PERMISSIONS.md`.
+- Vector similarity is computed in Python rather than a DB-side ANN index, which is fine at
+  meeting-transcript scale but wouldn't scale to millions of chunks — see `docs/RAG_ARCHITECTURE.md`.
