@@ -20,3 +20,5 @@ app/frontend/.env
 # OS / editor
 .DS_Store
 *.log
+
+/qe_mbert_regression/

@@ -1,31 +1,31 @@
 input_text,hter_true,hter_pred
 "EN: Stay connected
-ES_MT: Mantente conectado",1.0,0.6305016
+ES_MT: Mantente conectado",1.0,0.6214018
 "EN: Jump right in!
-ES_MT: ¡Saltar hacia la derecha!",1.3333334,0.46199676
+ES_MT: ¡Saltar hacia la derecha!",1.3333334,0.5292249
 "EN: This will link [TAG] device with yours.
-ES_MT: Esto vinculará [TAG] dispositivo con tuyo.",0.44444445,0.53353125
+ES_MT: Esto vinculará [TAG] dispositivo con tuyo.",0.44444445,0.56287533
 "EN: You've reached the [TAG] person limit
-ES_MT: Alcanzaste el límite de personas [TAG]",0.33333334,0.60295546
+ES_MT: Alcanzaste el límite de personas [TAG]",0.33333334,0.7138307
 "EN: DesignOne-of-a-kindfoldable design
 
-ES_MT: DiseñoDiseño intercambiableuno de los bordes de pantalla",3.0,0.56721824
+ES_MT: DiseñoDiseño intercambiableuno de los bordes de pantalla",3.0,0.4638114
 "EN: 
 OSAndroid™ 13 + 3 upgradesMem / Storage8GB/256GBChipsetSnapdragon 7 Gen 1 Mobile Platform
-ES_MT: OSAndroid™ 13 + 3 actualizacionesMem / Storage8 GB/256 GBChipsetSnapdragon 7 Gen 1 Mobile Platform",0.33333334,0.46887276
+ES_MT: OSAndroid™ 13 + 3 actualizacionesMem / Storage8 GB/256 GBChipsetSnapdragon 7 Gen 1 Mobile Platform",0.33333334,0.24372928
 "EN: Change the lens
-ES_MT: Cómo cambiar el lente",0.6666667,0.5717784
+ES_MT: Cómo cambiar el lente",0.6666667,0.70835125
 "EN: Please, connect to Wi-Fi and try to download again.
-ES_MT: Conéctate a Wi-Fi e intenta descargar de nuevo.",0.33333334,0.4748053
+ES_MT: Conéctate a Wi-Fi e intenta descargar de nuevo.",0.33333334,0.48264018
 "EN: USB Secure Folder Mode
-ES_MT: Modo de carpeta USB seguro Carpeta segura por USB",1.0,0.49661455
+ES_MT: Modo de carpeta USB seguro Carpeta segura por USB",1.0,0.42007837
 "EN: CamerasHigh-res cams forsharper photos
-ES_MT: Cámarasde alta resolución parafotos más nítidas",0.2857143,0.48698333
+ES_MT: Cámarasde alta resolución parafotos más nítidas",0.2857143,0.4398907
 "EN: Family Space is not supported on this device
-ES_MT: El espacio familiar no es compatible con este dispositivo",0.375,0.54957163
+ES_MT: El espacio familiar no es compatible con este dispositivo",0.375,0.53226674
 "EN: Go online to start playing
-ES_MT: Conéctate para empezar a jugar",0.33333334,0.6331554
+ES_MT: Conéctate para empezar a jugar",0.33333334,0.66349113
 "EN: Onboarding tutorials
-ES_MT: Tutoriales de inclución ",0.33333334,0.6035051
+ES_MT: Tutoriales de inclución ",0.33333334,0.5995792
 "EN: Quick settings
-ES_MT: configuración rápida",1.0,0.5703738
+ES_MT: configuración rápida",1.0,0.5873179
