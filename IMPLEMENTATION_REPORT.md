@@ -1,5 +1,12 @@
 # Implementation Report — Agentic Teams Meeting Intelligence Platform
 
+> **Historical document.** This describes the platform's *initial* build and testing pass, which
+> used plain PostgreSQL. PostgreSQL has since been fully removed — see
+> `docs/MIGRATION_FROM_POSTGRES.md` for what changed, and the PostgreSQL-removal refactor's own
+> final implementation report for the current state, test results, and a repository-wide
+> zero-PostgreSQL scan. Every PostgreSQL reference below is historical record of the original
+> build, not current, executable configuration.
+
 This report covers `app/` (the new platform), added alongside the pre-existing, unrelated
 QE-for-MT code at the repo root, which was left untouched. See `ARCHITECTURE_ASSESSMENT.md` for
 the pre-build assessment and rationale.

@@ -1,17 +1,15 @@
 from meeting_intel.agents.answer_agent import INSUFFICIENT_EVIDENCE_MSG, _parse_citations
 from meeting_intel.agents.decision_agent import _parse as parse_decision
 from meeting_intel.agents.prompts import UNTRUSTED_DATA_WARNING, build_meeting_qa_messages, format_excerpts
-from meeting_intel.db.models import TranscriptChunk
 from meeting_intel.retrieval.hybrid_search import RetrievedChunk
+from meeting_intel.retrieval.search_provider import SearchHit
 
 
 def _chunk(id_, speaker, start, end, text):
-    c = TranscriptChunk(
-        meeting_id="m1", transcript_id="t1", chunk_index=0, speaker=speaker,
-        start_seconds=start, end_seconds=end, text=text,
+    return SearchHit(
+        id=id_, meeting_id="m1", content=text, chunk_index=0,
+        start_time=start, end_time=end, speaker_name=speaker,
     )
-    c.id = id_
-    return c
 
 
 def test_format_excerpts_includes_speaker_and_timestamp():

@@ -75,12 +75,19 @@ async def share_message(
 
     from meeting_intel.security.authz import get_authorized_conversation
 
+    # An assistant message belongs either to a private conversation or to a
+    # group — whichever it is, the caller must be authorized for that SOURCE
+    # first (never only for the destination group below). Previously, a
+    # group-sourced message skipped this check entirely: any authenticated
+    # user could share another group's AI reply by guessing/observing its id.
     if message.conversation_id:
         conversation = await get_authorized_conversation(
             db, user=ctx.user, conversation_id=message.conversation_id
         )
         if conversation.user_id != ctx.user.id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your message")
+    elif message.group_id:
+        await get_authorized_group(db, user=ctx.user, group_id=message.group_id)
 
     group = await get_authorized_group(db, user=ctx.user, group_id=payload.group_id)
 

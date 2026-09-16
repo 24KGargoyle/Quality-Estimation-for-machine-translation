@@ -138,26 +138,14 @@ class MeetingTranscript(Base, UUIDPk, TimestampMixin):
     fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
-class TranscriptChunk(Base, UUIDPk, TimestampMixin):
-    __tablename__ = "transcript_chunks"
-    __table_args__ = (
-        Index("ix_transcript_chunks_meeting", "meeting_id"),
-        Index("ix_transcript_chunks_speaker", "speaker"),
-        Index("ix_transcript_chunks_meeting_speaker", "meeting_id", "speaker"),
-    )
-
-    meeting_id: Mapped[str] = mapped_column(ForeignKey("meetings.id", ondelete="CASCADE"), index=True)
-    transcript_id: Mapped[str] = mapped_column(ForeignKey("meeting_transcripts.id", ondelete="CASCADE"))
-    chunk_index: Mapped[int] = mapped_column(Integer)
-    speaker: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    start_seconds: Mapped[float] = mapped_column(Float)
-    end_seconds: Mapped[float] = mapped_column(Float)
-    text: Mapped[str] = mapped_column(Text)
-    # Stored as plain JSON (a list of floats) rather than a pgvector column so this app
-    # needs nothing beyond stock PostgreSQL — no extension to install/compile. Cosine
-    # similarity is computed in Python at query time (retrieval/hybrid_search.py); see
-    # docs/RAG_ARCHITECTURE.md for the tradeoff this makes against a DB-side ANN index.
-    embedding: Mapped[list[float] | None] = mapped_column(JSON, nullable=True)
+# NOTE: there is deliberately no `TranscriptChunk` SQL model. Transcript
+# chunks and their embeddings live exclusively in the search layer (Azure AI
+# Search, or the in-memory dev/test provider) — never in the relational
+# database, per the PostgreSQL-free RAG refinement's explicit requirement
+# ("Do NOT store vector embeddings in Azure SQL"). See
+# retrieval/search_provider.py and docs/MIGRATION_FROM_POSTGRES.md. A chunk's
+# identity as referenced from SQL (AISource.chunk_id below) is a plain string
+# — the search provider's document id — not a foreign key.
 
 
 # --------------------------------------------------------------------------
@@ -249,7 +237,10 @@ class AISource(Base, UUIDPk):
     __tablename__ = "ai_sources"
 
     ai_response_id: Mapped[str] = mapped_column(ForeignKey("ai_responses.id", ondelete="CASCADE"), index=True)
-    chunk_id: Mapped[str] = mapped_column(ForeignKey("transcript_chunks.id", ondelete="CASCADE"))
+    # The search provider's document id (Azure AI Search or the in-memory dev
+    # provider) — plain string, not a SQL foreign key, since chunks are never
+    # stored in the relational database. See the module-level note above.
+    chunk_id: Mapped[str] = mapped_column(String(128), index=True)
     speaker: Mapped[str | None] = mapped_column(String(255), nullable=True)
     start_seconds: Mapped[float] = mapped_column(Float)
     end_seconds: Mapped[float] = mapped_column(Float)
@@ -384,3 +375,33 @@ class AuditLog(Base, UUIDPk, TimestampMixin):
     resource_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     request_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     extra: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+
+# --------------------------------------------------------------------------
+# Auth: OAuth CSRF state + session revocation (logout)
+# --------------------------------------------------------------------------
+
+
+class OAuthState(Base):
+    """A random, single-use, server-persisted state value tying an Entra ID
+    authorization-code callback back to a login this server actually
+    initiated (CSRF / login-injection protection). Persisted, not held in
+    memory, so it survives a worker restart during the brief window a user is
+    on Microsoft's login page."""
+
+    __tablename__ = "oauth_states"
+
+    state: Mapped[str] = mapped_column(String(128), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class RevokedToken(Base):
+    """A session token's `jti`, recorded here on logout so it is rejected
+    immediately rather than remaining valid until its natural JWT expiry."""
+
+    __tablename__ = "revoked_tokens"
+
+    jti: Mapped[str] = mapped_column(String(64), primary_key=True)
+    revoked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

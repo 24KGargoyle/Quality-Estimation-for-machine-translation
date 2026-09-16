@@ -117,7 +117,7 @@ async def search_meeting(
     meeting = await get_authorized_meeting(db, user=ctx.user, meeting_id=meeting_id)
     from meeting_intel.retrieval.hybrid_search import hybrid_search
 
-    results = await hybrid_search(db, meeting_ids=[meeting.id], query=q, top_k=15)
+    results = await hybrid_search(db, tenant_id=ctx.tenant_id, meeting_ids=[meeting.id], query=q, top_k=15)
     return [
         {
             "chunk_id": r.chunk.id,
@@ -138,17 +138,13 @@ async def get_meeting_sources(
     db: AsyncSession = Depends(get_db),
 ) -> list[dict]:
     """All transcript chunks for a meeting the caller is authorized to see —
-    used by the UI to show a raw source browser."""
+    used by the UI to show a raw source browser. Chunks live in the search
+    layer (Azure AI Search / in-memory dev provider), not the relational
+    database — see retrieval/search_provider.py."""
     meeting = await get_authorized_meeting(db, user=ctx.user, meeting_id=meeting_id)
-    from meeting_intel.db.models import TranscriptChunk
+    from meeting_intel.retrieval.hybrid_search import get_search_provider
 
-    chunks = (
-        await db.execute(
-            select(TranscriptChunk)
-            .where(TranscriptChunk.meeting_id == meeting.id)
-            .order_by(TranscriptChunk.chunk_index)
-        )
-    ).scalars().all()
+    chunks = await get_search_provider().chunks_for_meeting(tenant_id=ctx.tenant_id, meeting_id=meeting.id)
     return [
         {
             "chunk_id": c.id,

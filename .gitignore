@@ -9,6 +9,11 @@ app/backend/.env
 app/backend/*.env
 !app/backend/.env.example
 
+# Local SQLite database (dev default — see docs/AZURE_SETUP.md for Azure SQL)
+app/backend/data/
+app/backend/*.db
+app/backend/*.db-journal
+
 # Node / Next.js
 node_modules/
 .next/

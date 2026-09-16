@@ -10,7 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from meeting_intel.agents.prompts import build_decision_messages
-from meeting_intel.llm.client import LLMNotConfiguredError, complete
+from meeting_intel.llm.client import LLMNotConfiguredError
+from meeting_intel.providers import get_llm_provider
 
 
 @dataclass
@@ -49,7 +50,7 @@ async def detect_decision(group_history: list[dict]) -> DecisionSuggestion:
         return DecisionSuggestion(detected=False)
     system, messages = build_decision_messages(group_history=group_history)
     try:
-        result = await complete(system=system, messages=messages, max_tokens=300)
+        result = await get_llm_provider().complete(system=system, messages=messages, max_tokens=300)
     except LLMNotConfiguredError:
         return DecisionSuggestion(detected=False)
     return _parse(result.text)

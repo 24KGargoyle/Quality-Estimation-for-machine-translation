@@ -39,7 +39,6 @@ class LoginUrlResponse(BaseModel):
 
 class MeetingLoadRequest(BaseModel):
     meeting_id: str = Field(description="The Teams Meeting ID (numeric join id) or an internal id for manual upload")
-    organizer_email: str | None = None
     title: str | None = None
     transcript_vtt: str | None = Field(
         default=None,

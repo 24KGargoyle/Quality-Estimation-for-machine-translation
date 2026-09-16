@@ -1,9 +1,8 @@
-import secrets
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from meeting_intel.auth.deps import RequestContext, get_current_context
 from meeting_intel.auth.dev import DevAuthDisabledError, dev_login
 from meeting_intel.auth.entra import GraphNotConfiguredError, acquire_token_by_auth_code, get_login_url
 from meeting_intel.api.schemas import DevLoginRequest, EntraCallbackRequest, LoginUrlResponse, TokenResponse
@@ -11,6 +10,7 @@ from meeting_intel.config import get_settings
 from meeting_intel.db.models import Tenant, User, UserRole
 from meeting_intel.db.session import get_db
 from meeting_intel.security.jwt import create_session_token
+from meeting_intel.security.session_security import consume_oauth_state, create_oauth_state, revoke_token
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 settings = get_settings()
@@ -46,11 +46,14 @@ async def dev_login_endpoint(payload: DevLoginRequest, db: AsyncSession = Depend
 
 
 @router.get("/entra/login-url", response_model=LoginUrlResponse)
-async def entra_login_url() -> LoginUrlResponse:
+async def entra_login_url(db: AsyncSession = Depends(get_db)) -> LoginUrlResponse:
     if settings.auth_provider != "entra":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Entra auth is not the active provider")
     try:
-        url = get_login_url(state=secrets.token_urlsafe(16))
+        # Persisted server-side and required back on the callback below, so a
+        # callback can never be accepted unless this server actually issued
+        # the login it claims to complete (CSRF / login-injection protection).
+        url = get_login_url(state=await create_oauth_state(db))
     except GraphNotConfiguredError as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
     return LoginUrlResponse(login_url=url)
@@ -60,6 +63,8 @@ async def entra_login_url() -> LoginUrlResponse:
 async def entra_callback(payload: EntraCallbackRequest, db: AsyncSession = Depends(get_db)) -> TokenResponse:
     if settings.auth_provider != "entra":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Entra auth is not the active provider")
+    if not await consume_oauth_state(db, payload.state):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired login state")
     try:
         result = await acquire_token_by_auth_code(payload.code)
     except GraphNotConfiguredError as exc:
@@ -94,3 +99,15 @@ async def entra_callback(payload: EntraCallbackRequest, db: AsyncSession = Depen
     await db.commit()
 
     return _token_response(user)
+
+
+@router.post("/logout")
+async def logout(
+    ctx: RequestContext = Depends(get_current_context), db: AsyncSession = Depends(get_db)
+) -> dict:
+    """Revokes this session's token immediately (rather than leaving it valid
+    until JWT_EXPIRES_MINUTES naturally elapses) — the client should also
+    discard the token, but a copied/leaked token stops working the moment
+    the legitimate user logs out, not up to 12 hours later."""
+    await revoke_token(db, jti=ctx.jti, expires_at=ctx.expires_at)
+    return {"status": "logged_out"}

@@ -1,5 +1,13 @@
 # Architecture Assessment — Agentic Teams Meeting Intelligence Platform
 
+> **Historical document.** This describes the platform's *original* build, which used plain
+> PostgreSQL for both relational storage and full-text search. PostgreSQL has since been fully
+> removed from this application (relational data now uses SQLite/Azure SQL Database; search now
+> uses an in-memory dev provider/Azure AI Search) — see `docs/MIGRATION_FROM_POSTGRES.md` for
+> what changed and why, and `docs/ARCHITECTURE.md`/`docs/DATABASE.md`/`docs/RAG_ARCHITECTURE.md`
+> for the current state. Every PostgreSQL reference below is retained as historical record of the
+> original design decision, not as current, executable configuration.
+
 ## 1. Current Repository State (before this change)
 
 The repository `24kgargoyle/quality-estimation-for-machine-translation` is a **machine-translation

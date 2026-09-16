@@ -1,7 +1,8 @@
 # Architecture
 
-See `ARCHITECTURE_ASSESSMENT.md` at the repo root for the pre-implementation assessment
-(what existed, what was reused, why this stack). This document describes the system as built.
+See `ARCHITECTURE_ASSESSMENT.md` at the repo root for the original pre-implementation assessment,
+and `docs/MIGRATION_FROM_POSTGRES.md` for what changed in the PostgreSQL-removal refactor. This
+document describes the system as built today — **no PostgreSQL, no pgvector, anywhere**.
 
 ## Component overview
 
@@ -16,21 +17,24 @@ See `ARCHITECTURE_ASSESSMENT.md` at the repo root for the pre-implementation ass
                          │   (app/backend)           │
                          │                           │
    ┌──────────────┐      │  Auth (Entra/dev) ─ JWT  │      ┌───────────────────┐
-   │ Microsoft     │◄────┤  Graph client            │      │ Anthropic Claude   │
-   │ Graph API     │      │  Ingestion pipeline      │─────►│ (Messages API)     │
-   └──────────────┘      │  Hybrid retrieval         │      └───────────────────┘
-                         │  Agents (router/answer/   │
-                         │   discussion/decision)    │
-                         │  Conversation providers   │
-                         │  WebSocket manager        │
-                         └────────────┬─────────────┘
-                                      │
-                         ┌────────────▼─────────────┐
-                         │ PostgreSQL (plain)        │
-                         │ (relational + full-text;  │
-                         │  vector similarity done   │
-                         │  in Python, not the DB)   │
-                         └───────────────────────────┘
+   │ Microsoft     │◄────┤  Graph client            │      │ LLM provider       │
+   │ Graph API     │      │  Ingestion pipeline      │─────►│ (Anthropic /       │
+   └──────────────┘      │  SearchProvider-backed    │      │  Azure OpenAI)     │
+                         │   retrieval                │      └───────────────────┘
+                         │  Agents (router/answer/   │      ┌───────────────────┐
+                         │   discussion/decision)    │─────►│ Embedding provider │
+                         │  Conversation providers   │      │ (local /           │
+                         │  WebSocket manager        │      │  Azure OpenAI)     │
+                         └──────┬─────────────┬──────┘      └───────────────────┘
+                                │             │
+                    ┌───────────▼───┐   ┌─────▼──────────────────┐
+                    │ SQLite (dev)/ │   │ SearchProvider          │
+                    │ Azure SQL     │   │  - InMemorySearchProvider│
+                    │ (production)  │   │    (dev/test, NOT Azure) │
+                    │ relational    │   │  - AzureAISearchProvider │
+                    │ app data      │   │    (keyword+vector+      │
+                    │               │   │     semantic hybrid)     │
+                    └───────────────┘   └─────────────────────────┘
 ```
 
 ## Directory layout
@@ -42,16 +46,19 @@ app/
       auth/          Entra ID (MSAL) + dev auth providers, session deps
       graph/          Microsoft Graph client (meetings, transcripts, chat messages)
       ingestion/      VTT transcript parsing, chunking, indexing pipeline
-      embeddings/     Local sentence-transformers embedder
-      retrieval/      Hybrid (vector + keyword) search
+      providers.py    LLMProvider/EmbeddingProvider abstractions (Anthropic/local + Azure OpenAI)
+      llm/            Anthropic client wrapper (the default LLMProvider implementation)
+      embeddings/     Local sentence-transformers embedder (the default EmbeddingProvider)
+      retrieval/      SearchProvider abstraction: search_provider.py (interface),
+                      memory_search.py (dev/test), azure_search.py (production), hybrid_search.py
+                      (thin dispatcher used by agents/routers)
       agents/         Meeting router, retrieval/answer/discussion/decision agents, prompts
-      llm/            Anthropic client wrapper
       conversations/  ConversationProvider abstraction (Internal / Teams)
       realtime/       WebSocket connection manager
-      security/       JWT, authorization checks, audit log
+      security/       JWT, OAuth state (CSRF), token revocation, authorization checks, audit log
       api/routers/    FastAPI route handlers
-      db/             SQLAlchemy models, session
-    alembic/          Migrations
+      db/             SQLAlchemy models, session (SQLite/Azure SQL, dialect-agnostic)
+    alembic/          Migrations (portable — no PostgreSQL-specific SQL)
     tests/            unit / integration / e2e
   frontend/
     src/app/          Next.js App Router pages (dashboard, meetings, groups, search, feedback, settings)
@@ -59,20 +66,26 @@ app/
     src/lib/          API client, auth context, shared TS types
 ```
 
-No Docker is used — see `docs/DEPLOYMENT.md` for the local-process setup (Postgres install,
+No Docker is used — see `docs/DEPLOYMENT.md` for the local-process setup (SQLite by default,
 Python venv, `npm run dev`/`npm run start`).
 
 ## Why this stack
 
 - **FastAPI**: async-native, typed request/response schemas (Pydantic), native WebSocket
   support, mature SQLAlchemy/Alembic ecosystem.
-- **Plain PostgreSQL**: one database serves the relational schema *and* keyword search (via
-  native `tsvector`/GIN). Vector similarity is computed in Python (numpy) rather than via the
-  `pgvector` extension, which has no plain installer on Windows and would otherwise force
-  Docker/WSL2 there — see `docs/RAG_ARCHITECTURE.md`.
-- **sentence-transformers (local)**: real embeddings without a mandatory paid API key.
-- **Anthropic Claude**: the LLM used for grounded answers, discussion assistance, and
-  decision/action-item extraction, via the official `anthropic` SDK.
+- **SQLite (dev/test) / Azure SQL (production)**: the relational store holds only application/
+  transactional data (users, tenants, conversations, groups, feedback, decisions, action items) —
+  never vector embeddings or transcript chunks. `create_async_engine` is dialect-agnostic at the
+  call site; nothing downstream depends on PostgreSQL-specific SQL any more.
+- **SearchProvider abstraction (Azure AI Search in production, an honestly-labeled in-memory
+  provider for dev/test)**: keyword, vector, hybrid, and semantic search over transcript chunks —
+  replaces both PostgreSQL full-text search and the prior Python/numpy vector similarity. See
+  `docs/RAG_ARCHITECTURE.md`.
+- **LLMProvider/EmbeddingProvider abstraction**: Anthropic Claude + local sentence-transformers
+  remain the default, working providers (no external Azure credentials required to run this app
+  today); `AzureOpenAILLMProvider`/`AzureOpenAIEmbeddingProvider` are real, alternate
+  implementations selected via `LLM_PROVIDER=azure_openai` / `EMBEDDING_PROVIDER=azure_openai`
+  once Azure OpenAI credentials are provisioned — see `docs/AZURE_SETUP.md`.
 - **Next.js + React + TypeScript + Tailwind**: per the brief's default frontend stack.
 
 ## Request flow: asking a question
@@ -83,13 +96,13 @@ Python venv, `npm run dev`/`npm run start`).
 3. `agents/meeting_router` decides retrieval scope (single meeting, unless the question is an
    explicit cross-meeting request) and extracts a speaker filter if the question names a
    participant.
-4. `retrieval/hybrid_search` runs vector (numpy cosine similarity, computed in Python) +
-   keyword (Postgres full-text) search over `transcript_chunks`, fused via reciprocal rank
-   fusion, filtered by meeting id(s) and speaker.
+4. `retrieval/hybrid_search` calls `get_embedding_provider().embed_query(...)`, then the active
+   `SearchProvider`'s `hybrid_search(tenant_id=..., meeting_ids=..., ...)` — the mandatory
+   `tenant_id` + `meeting_id` filters are enforced inside the provider itself, never optional.
 5. `agents/answer_agent` builds a grounded prompt (`agents/prompts.py`) from the retrieved
-   excerpts + conversation history and calls the LLM. The model must cite excerpts as `[S1]`,
-   `[S2]`, …; citations are mapped back to the exact chunk metadata (speaker/timestamp) — never
-   trusted as free text.
+   excerpts + conversation history and calls `get_llm_provider().complete(...)`. The model must
+   cite excerpts as `[S1]`, `[S2]`, …; citations are mapped back to the exact chunk metadata
+   (speaker/timestamp) — never trusted as free text.
 6. The answer, `AIResponse`, and `AISource` rows are persisted; the response returns the answer,
    sources, and whether the evidence was sufficient.
 
@@ -100,5 +113,9 @@ Python venv, `npm run dev`/`npm run start`).
 - Microsoft Graph / Teams integration code paths are real but unexercised against a live tenant
   in this environment (no Azure AD app registration available) — see
   `docs/MICROSOFT_GRAPH_PERMISSIONS.md`.
-- Vector similarity is computed in Python rather than a DB-side ANN index, which is fine at
-  meeting-transcript scale but wouldn't scale to millions of chunks — see `docs/RAG_ARCHITECTURE.md`.
+- **Azure SQL, Azure AI Search, and Azure OpenAI have not been live-tested against real Azure
+  resources in this environment** (none are available here). Each has a real implementation
+  behind its abstraction, validated via unit tests with mocked HTTP/config, and is inert
+  (raises a clear "not configured" error) rather than silently falling back to anything else when
+  credentials aren't present — see `docs/AZURE_SETUP.md` and the final implementation report's
+  stated limitations.

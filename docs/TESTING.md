@@ -2,9 +2,10 @@
 
 ## What's covered
 
-`app/backend/tests/`, run with `pytest` against a real (plain) Postgres database, not
-mocked/sqlite — the schema depends on native full-text search (`tsvector`/GIN), which sqlite
-doesn't provide. 30 tests, all passing as of this writing.
+`app/backend/tests/`, run with `pytest` against a real, isolated, temporary SQLite database (via
+the async `aiosqlite` driver) — no PostgreSQL, no external database server, no setup required.
+**58 tests, all passing** as of this writing (`python -m pytest -q`, ~10-16s local wall time,
+including one end-to-end test that loads a real sentence-transformers model).
 
 ### Unit (`tests/unit/`, no database)
 
@@ -19,71 +20,82 @@ doesn't provide. 30 tests, all passing as of this writing.
   chunk; out-of-range citations fall back sanely; the insufficient-evidence message is exact and
   stable; decision-agent response parsing (conservative "no" case, action items with/without an
   owner).
+- **`test_memory_search.py`** — the `InMemorySearchProvider`: keyword word-overlap scoring,
+  vector cosine ranking, hybrid RRF fusion, chunk ordering, and — critically — **tenant and
+  meeting isolation** (a query scoped to one tenant/meeting never returns another's chunks).
+- **`test_azure_search.py`** — the `AzureAISearchProvider`, entirely against mocked HTTP (no live
+  Azure resource): the provider raises `SearchNotConfiguredError` *before any HTTP call* when
+  unconfigured; the index schema it would create (all 16 fields, vector dimensions sourced from
+  the active embedding provider's config, vector search + semantic search sections); document
+  upload sends `mergeOrUpload` actions; every query includes a mandatory `tenant_id`+`meeting_id`
+  OData filter; OData special characters (`'`) are escaped to prevent filter injection; a
+  transport failure surfaces as `SearchNotConfiguredError`, never a fabricated result.
 
 ### Integration (`tests/integration/`, real DB via httpx `ASGITransport`)
 
 - `test_meeting_ingestion.py` — manual transcript upload indexes correctly (status, duration,
   participants); sources preserve speaker/timestamp; Graph-path returns `503` (not fabricated
-  data) when unconfigured; **re-loading the same Meeting ID is idempotent** (regression test for
-  a real bug found during manual QA — see below).
+  data) when unconfigured; re-loading the same Meeting ID is idempotent (regression test for a
+  real bug found during manual QA).
 - `test_authz.py` — no/invalid token rejected; cross-tenant meeting access returns `404`;
   same-tenant non-participant access returns `403`; a user cannot read another user's private
   conversation; a non-member cannot post to a group.
+- **`test_auth_security.py`** — three security fixes made during the PostgreSQL-removal
+  refactor: (1) the Entra OAuth `state` is now server-persisted, single-use, and validated on
+  callback (rejected *before any MSAL/Graph call*), where it was previously accepted from the
+  client and never checked; (2) `POST /api/auth/logout` immediately revokes the session token
+  (checked via a `RevokedToken` table + the JWT's `jti` claim), and does not affect other users'
+  tokens; (3) sharing a group-sourced AI message now requires membership in the *source* group,
+  not only the destination group (previously any tenant user could re-share it).
 
 ### End-to-end (`tests/e2e/test_full_flow.py`)
 
 One test walking the full acceptance-criteria flow at the API level: login → load meeting (manual
-transcript) → ask a question (verifies meeting isolation + speaker-filter extraction) → follow-up
-question in the same conversation → feedback → create group → share AI answer to group ("Discuss
-with Group") → group message with `ask_ai` → decision suggestion → human-confirmed decision → 
-action item with an assigned owner.
+transcript) → ask a question (verifies meeting isolation + speaker-filter extraction, against the
+real `InMemorySearchProvider` and a real local embedding model) → follow-up question in the same
+conversation → feedback → create group → share AI answer to group ("Discuss with Group") → group
+message with `ask_ai` → decision suggestion → human-confirmed decision → action item with an
+assigned owner.
 
-**A true browser E2E (Playwright against the running Next.js UI) was run manually during
-development** (not checked into the automated suite) — it drove the exact same flow through the
-real UI: dev login → load meeting via manual transcript paste → ask a question → 👎 feedback with
-a reason → Discuss with Group → real-time WebSocket delivery of the shared context card into the
-group chat → `ask_ai` group reply delivered live → decision-check. This caught one real bug (see
-below) that the API-level tests alone had not — a good argument for adding it to CI as a
-Playwright test in a follow-up, rather than leaving it manual.
-
-### Bug found and fixed during this testing pass
-
-Re-submitting the same Meeting ID (e.g. a page refresh, or a user double-clicking "Load
-meeting") crashed with a Postgres unique-constraint violation, because `_index_transcript_text`
-unconditionally created a new `meeting_transcripts` row even when one already existed. Fixed in
-`ingestion/pipeline.py` to be a no-op when the meeting is already `ready`, and locked in by
-`test_reloading_same_meeting_id_is_idempotent`.
+**A true browser E2E (Playwright against the running Next.js UI) was run manually during initial
+development** (not checked into the automated suite; not re-run for this refactor since no
+frontend/API contract changed) — see `docs/DEPLOYMENT.md`.
 
 ## Running the suite
 
 ```bash
 cd app/backend
-sudo -u postgres psql -c "CREATE DATABASE meeting_intel_test OWNER meeting_intel;"
 source .venv/bin/activate
 python -m pytest -q
 ```
 
-`tests/conftest.py` runs Alembic migrations once per session against `meeting_intel_test`,
-truncates all tables between tests for isolation, and overrides the FastAPI `get_db` dependency
-with an engine bound to each test's own event loop (avoids asyncpg cross-event-loop errors under
-`pytest-asyncio`).
+`tests/conftest.py` creates a real, temporary SQLite database file per test session, runs
+Alembic-equivalent schema creation against it, deletes all rows between tests for isolation
+(`_clean_tables`, also resets the `InMemorySearchProvider`'s in-process store), and overrides the
+FastAPI `get_db` dependency with a session bound to each test's own event loop.
 
 ## Security tests
 
-Covered by `tests/integration/test_authz.py` (see above): unauthorized meeting access,
-cross-tenant access, non-participant same-tenant access, cross-user conversation access,
-non-member group posting. Prompt-injection separation is covered structurally (see
-`docs/SECURITY.md`); a live-LLM adversarial run was not performed for lack of a configured
-`ANTHROPIC_API_KEY` in this environment. Cross-meeting retrieval's authorization boundary
-(`get_all_authorized_meeting_ids`) is covered by unit tests on the router logic but not yet by an
-integration test that actually attempts to retrieve from an unauthorized meeting via the
-cross-meeting path — flagged as a follow-up in `IMPLEMENTATION_REPORT.md`.
+Covered by `tests/integration/test_authz.py` (unauthorized meeting access, cross-tenant access,
+non-participant same-tenant access, cross-user conversation access, non-member group posting) and
+`tests/integration/test_auth_security.py` (OAuth CSRF state validation, session logout/
+revocation, source-group membership on message sharing) — see above. Tenant/meeting isolation at
+the search layer is additionally covered directly by `tests/unit/test_memory_search.py` and
+`tests/unit/test_azure_search.py`'s mandatory-filter assertions. Prompt-injection separation is
+covered structurally (see `docs/SECURITY.md`); a live-LLM adversarial run was not performed for
+lack of a configured `ANTHROPIC_API_KEY`/Azure OpenAI credentials in this environment.
 
 ## Not covered / explicitly out of scope for this pass
 
 - Load/concurrency testing of the WebSocket layer.
 - A live Microsoft Graph integration test (no Azure AD app registration available).
-- A live Anthropic API call test (no usable API key in this sandbox — see
-  `IMPLEMENTATION_REPORT.md`); the LLM call itself is a thin, standard SDK wrapper
-  (`llm/client.py`), and all logic around it (prompt construction, citation parsing, fallback
-  behavior) is unit-tested independently of the network call.
+- A live Anthropic or Azure OpenAI API call test (no usable credentials in this sandbox); the LLM
+  call itself is a thin, standard SDK wrapper, and all logic around it (prompt construction,
+  citation parsing, fallback behavior) is unit-tested independently of the network call.
+- **A live Azure SQL Database or Azure AI Search integration test** — no Azure subscription is
+  available in this environment. The `AzureAISearchProvider` is tested against mocked HTTP
+  (request/response shape, schema, filter construction, unconfigured-error contract), which
+  verifies the client's own logic but does not prove behavior against a real Azure Search
+  service. Azure SQL is only exercised indirectly: the SQLAlchemy/Alembic layer is dialect-generic
+  and was verified against SQLite; the `AZURE_SQL_CONNECTION_STRING` path itself has not been
+  run. See `docs/AZURE_SETUP.md` and the final implementation report.

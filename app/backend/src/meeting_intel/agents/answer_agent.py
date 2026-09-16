@@ -15,7 +15,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from meeting_intel.agents.prompts import build_meeting_qa_messages
 from meeting_intel.agents.retrieval_agent import resolve_scope_and_retrieve
 from meeting_intel.db.models import Meeting, User
-from meeting_intel.llm.client import LLMNotConfiguredError, complete
+from meeting_intel.llm.client import LLMNotConfiguredError
+from meeting_intel.providers import get_llm_provider
 from meeting_intel.retrieval.hybrid_search import RetrievedChunk
 
 INSUFFICIENT_EVIDENCE_MSG = "I couldn't find enough evidence in this meeting to answer that confidently."
@@ -100,7 +101,7 @@ async def answer_question(
 
     system, messages = build_meeting_qa_messages(history=history, excerpts=chunks, question=question)
     try:
-        result = await complete(system=system, messages=messages)
+        result = await get_llm_provider().complete(system=system, messages=messages)
     except LLMNotConfiguredError:
         return AnswerResult(
             text=LLM_UNAVAILABLE_MSG,

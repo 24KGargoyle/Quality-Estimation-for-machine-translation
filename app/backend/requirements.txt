@@ -2,7 +2,7 @@ fastapi==0.115.0
 uvicorn[standard]==0.30.6
 sqlalchemy==2.0.52
 alembic==1.13.2
-asyncpg==0.31.0
+aiosqlite==0.20.0
 numpy==2.4.6
 pydantic==2.13.5
 pydantic-settings==2.15.0
@@ -11,6 +11,7 @@ passlib[bcrypt]==1.7.4
 msal==1.31.0
 httpx==0.27.2
 anthropic==0.34.2
+openai==1.51.2
 sentence-transformers==3.1.1
 tenacity==9.0.0
 python-multipart==0.0.9

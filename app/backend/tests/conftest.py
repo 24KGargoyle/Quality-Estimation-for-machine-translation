@@ -1,21 +1,27 @@
 import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 BACKEND_ROOT = Path(__file__).resolve().parent.parent
-TEST_DATABASE_URL = "postgresql+asyncpg://meeting_intel:meeting_intel@localhost:5432/meeting_intel_test"
+
+# Real SQLite (async, via aiosqlite) — zero external database server required.
+# One file per test session, recreated fresh each run. This replaces the
+# previous PostgreSQL test database entirely; see docs/MIGRATION_FROM_POSTGRES.md.
+_TEST_DB_DIR = tempfile.TemporaryDirectory()
+TEST_DATABASE_URL = f"sqlite+aiosqlite:///{_TEST_DB_DIR.name}/test.db"
 
 os.environ.setdefault("DATABASE_URL", TEST_DATABASE_URL)
 os.environ.setdefault("AUTH_PROVIDER", "dev")
 os.environ.setdefault("APP_ENV", "local")
 os.environ.setdefault("SECRET_KEY", "test-secret")
+os.environ.setdefault("SEARCH_PROVIDER", "memory")
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -28,20 +34,30 @@ def _run_migrations():
         check=True,
     )
     yield
+    _TEST_DB_DIR.cleanup()
 
 
 @pytest_asyncio.fixture(autouse=True)
 async def _clean_tables():
-    """Truncate all tables between tests for isolation, without recreating the schema each time."""
+    """Delete all rows between tests for isolation, without recreating the
+    schema each time. Also resets the in-memory search provider, which holds
+    process-local state the database truncation below knows nothing about."""
+    from meeting_intel.retrieval.memory_search import get_memory_provider
+
+    get_memory_provider().reset()
+
     engine = create_async_engine(TEST_DATABASE_URL)
     async with engine.begin() as conn:
+        from sqlalchemy import text
+
         tables = [
-            "audit_log", "action_items", "decisions", "discussions", "feedback", "ai_sources",
-            "ai_responses", "messages", "conversation_members", "conversations", "group_members",
-            "groups", "transcript_chunks", "meeting_transcripts", "meeting_participants", "meetings",
+            "revoked_tokens", "oauth_states", "audit_log", "action_items", "decisions", "discussions",
+            "feedback", "ai_sources", "ai_responses", "messages", "conversation_members", "conversations",
+            "group_members", "groups", "meeting_transcripts", "meeting_participants", "meetings",
             "teams_mappings", "users", "tenants",
         ]
-        await conn.execute(text(f"TRUNCATE TABLE {', '.join(tables)} RESTART IDENTITY CASCADE"))
+        for table in tables:
+            await conn.execute(text(f"DELETE FROM {table}"))
     await engine.dispose()
     yield
 
@@ -49,8 +65,7 @@ async def _clean_tables():
 @pytest_asyncio.fixture
 async def client():
     """Fresh engine/sessionmaker bound to this test's running event loop,
-    overriding the app's module-level `get_db` dependency. Avoids reusing
-    asyncpg connections across event loop instances between tests."""
+    overriding the app's module-level `get_db` dependency."""
     from meeting_intel.db.session import get_db
     from meeting_intel.main import app
 

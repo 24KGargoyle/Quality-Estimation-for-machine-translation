@@ -25,5 +25,7 @@ async def resolve_scope_and_retrieve(
         # current meeting always included even if somehow missing from the authorized set
         meeting_ids = list({*authorized, meeting.id})
 
-    chunks = await hybrid_search(db, meeting_ids=meeting_ids, query=question, speaker=speaker)
+    chunks = await hybrid_search(
+        db, tenant_id=user.tenant_id, meeting_ids=meeting_ids, query=question, speaker=speaker
+    )
     return chunks, speaker, cross_meeting

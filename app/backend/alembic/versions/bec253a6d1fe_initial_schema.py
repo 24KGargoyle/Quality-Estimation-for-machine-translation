@@ -23,7 +23,7 @@ def upgrade() -> None:
     sa.Column('name', sa.String(length=255), nullable=False),
     sa.Column('ms_tenant_id', sa.String(length=64), nullable=True),
     sa.Column('id', sa.String(length=36), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('ms_tenant_id')
     )
@@ -35,7 +35,7 @@ def upgrade() -> None:
     sa.Column('password_hash', sa.String(length=255), nullable=True),
     sa.Column('role', sa.Enum('member', 'admin', name='userrole'), nullable=False),
     sa.Column('id', sa.String(length=36), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     sa.ForeignKeyConstraint(['tenant_id'], ['tenants.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('ms_object_id'),
@@ -52,7 +52,7 @@ def upgrade() -> None:
     sa.Column('request_id', sa.String(length=64), nullable=True),
     sa.Column('extra', sa.JSON(), nullable=True),
     sa.Column('id', sa.String(length=36), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     sa.ForeignKeyConstraint(['tenant_id'], ['tenants.id'], ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='SET NULL'),
     sa.PrimaryKeyConstraint('id')
@@ -63,7 +63,7 @@ def upgrade() -> None:
     sa.Column('name', sa.String(length=255), nullable=False),
     sa.Column('created_by', sa.String(length=36), nullable=False),
     sa.Column('id', sa.String(length=36), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     sa.ForeignKeyConstraint(['created_by'], ['users.id'], ondelete='SET NULL'),
     sa.ForeignKeyConstraint(['tenant_id'], ['tenants.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
@@ -81,7 +81,7 @@ def upgrade() -> None:
     sa.Column('recording_available', sa.Boolean(), nullable=False),
     sa.Column('status', sa.Enum('pending', 'indexing', 'ready', 'failed', 'no_transcript', name='meetingstatus'), nullable=False),
     sa.Column('id', sa.String(length=36), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     sa.ForeignKeyConstraint(['organizer_id'], ['users.id'], ondelete='SET NULL'),
     sa.ForeignKeyConstraint(['tenant_id'], ['tenants.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id'),
@@ -96,9 +96,9 @@ def upgrade() -> None:
     sa.Column('meeting_id', sa.String(length=36), nullable=True),
     sa.Column('kind', sa.Enum('private_meeting', 'private_general', name='conversationkind'), nullable=False),
     sa.Column('title', sa.String(length=255), nullable=False),
-    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     sa.Column('id', sa.String(length=36), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     sa.ForeignKeyConstraint(['meeting_id'], ['meetings.id'], ondelete='SET NULL'),
     sa.ForeignKeyConstraint(['tenant_id'], ['tenants.id'], ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
@@ -137,9 +137,9 @@ def upgrade() -> None:
     sa.Column('source', sa.Enum('graph', 'manual_upload', name='transcriptsource'), nullable=False),
     sa.Column('raw_format', sa.String(length=32), nullable=False),
     sa.Column('storage_ref', sa.Text(), nullable=False),
-    sa.Column('fetched_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('fetched_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     sa.Column('id', sa.String(length=36), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     sa.ForeignKeyConstraint(['meeting_id'], ['meetings.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('meeting_id', name='uq_meeting_transcripts_meeting')
@@ -152,7 +152,7 @@ def upgrade() -> None:
     sa.Column('teams_channel_id', sa.String(length=255), nullable=True),
     sa.Column('teams_team_id', sa.String(length=255), nullable=True),
     sa.Column('id', sa.String(length=36), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     sa.ForeignKeyConstraint(['group_id'], ['groups.id'], ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['tenant_id'], ['tenants.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id'),
@@ -178,7 +178,7 @@ def upgrade() -> None:
     sa.Column('shared_from_message_id', sa.String(length=36), nullable=True),
     sa.Column('meeting_id', sa.String(length=36), nullable=True),
     sa.Column('id', sa.String(length=36), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     sa.CheckConstraint('(conversation_id IS NOT NULL AND group_id IS NULL) OR (conversation_id IS NULL AND group_id IS NOT NULL)', name='ck_message_single_parent'),
     sa.ForeignKeyConstraint(['conversation_id'], ['conversations.id'], ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['group_id'], ['groups.id'], ondelete='CASCADE'),
@@ -189,25 +189,9 @@ def upgrade() -> None:
     )
     op.create_index('ix_messages_conversation', 'messages', ['conversation_id'], unique=False)
     op.create_index('ix_messages_group', 'messages', ['group_id'], unique=False)
-    op.create_table('transcript_chunks',
-    sa.Column('meeting_id', sa.String(length=36), nullable=False),
-    sa.Column('transcript_id', sa.String(length=36), nullable=False),
-    sa.Column('chunk_index', sa.Integer(), nullable=False),
-    sa.Column('speaker', sa.String(length=255), nullable=True),
-    sa.Column('start_seconds', sa.Float(), nullable=False),
-    sa.Column('end_seconds', sa.Float(), nullable=False),
-    sa.Column('text', sa.Text(), nullable=False),
-    sa.Column('embedding', sa.JSON(), nullable=True),
-    sa.Column('id', sa.String(length=36), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.ForeignKeyConstraint(['meeting_id'], ['meetings.id'], ondelete='CASCADE'),
-    sa.ForeignKeyConstraint(['transcript_id'], ['meeting_transcripts.id'], ondelete='CASCADE'),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index('ix_transcript_chunks_meeting', 'transcript_chunks', ['meeting_id'], unique=False)
-    op.create_index(op.f('ix_transcript_chunks_meeting_id'), 'transcript_chunks', ['meeting_id'], unique=False)
-    op.create_index('ix_transcript_chunks_meeting_speaker', 'transcript_chunks', ['meeting_id', 'speaker'], unique=False)
-    op.create_index('ix_transcript_chunks_speaker', 'transcript_chunks', ['speaker'], unique=False)
+    # NOTE: no `transcript_chunks` table — chunks + embeddings live in the
+    # search layer (Azure AI Search / in-memory dev provider), never in the
+    # relational database. See db/models.py's module-level note.
     op.create_table('ai_responses',
     sa.Column('message_id', sa.String(length=36), nullable=False),
     sa.Column('meeting_id', sa.String(length=36), nullable=True),
@@ -216,7 +200,7 @@ def upgrade() -> None:
     sa.Column('model', sa.String(length=128), nullable=False),
     sa.Column('latency_ms', sa.Integer(), nullable=True),
     sa.Column('id', sa.String(length=36), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     sa.ForeignKeyConstraint(['meeting_id'], ['meetings.id'], ondelete='SET NULL'),
     sa.ForeignKeyConstraint(['message_id'], ['messages.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id'),
@@ -230,7 +214,7 @@ def upgrade() -> None:
     sa.Column('topic', sa.String(length=500), nullable=False),
     sa.Column('created_by', sa.String(length=36), nullable=False),
     sa.Column('id', sa.String(length=36), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     sa.ForeignKeyConstraint(['created_by'], ['users.id'], ondelete='SET NULL'),
     sa.ForeignKeyConstraint(['group_id'], ['groups.id'], ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['meeting_id'], ['meetings.id'], ondelete='SET NULL'),
@@ -249,7 +233,7 @@ def upgrade() -> None:
     sa.Column('answer', sa.Text(), nullable=True),
     sa.Column('retrieved_source_ids', sa.JSON(), nullable=True),
     sa.Column('id', sa.String(length=36), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     sa.ForeignKeyConstraint(['meeting_id'], ['meetings.id'], ondelete='SET NULL'),
     sa.ForeignKeyConstraint(['message_id'], ['messages.id'], ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
@@ -260,7 +244,10 @@ def upgrade() -> None:
     op.create_index(op.f('ix_feedback_user_id'), 'feedback', ['user_id'], unique=False)
     op.create_table('ai_sources',
     sa.Column('ai_response_id', sa.String(length=36), nullable=False),
-    sa.Column('chunk_id', sa.String(length=36), nullable=False),
+    # The search provider's document id (Azure AI Search / in-memory dev
+    # provider) — plain string, not a foreign key; chunks are never stored
+    # in the relational database.
+    sa.Column('chunk_id', sa.String(length=128), nullable=False),
     sa.Column('speaker', sa.String(length=255), nullable=True),
     sa.Column('start_seconds', sa.Float(), nullable=False),
     sa.Column('end_seconds', sa.Float(), nullable=False),
@@ -268,10 +255,10 @@ def upgrade() -> None:
     sa.Column('score', sa.Float(), nullable=False),
     sa.Column('id', sa.String(length=36), nullable=False),
     sa.ForeignKeyConstraint(['ai_response_id'], ['ai_responses.id'], ondelete='CASCADE'),
-    sa.ForeignKeyConstraint(['chunk_id'], ['transcript_chunks.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_ai_sources_ai_response_id'), 'ai_sources', ['ai_response_id'], unique=False)
+    op.create_index(op.f('ix_ai_sources_chunk_id'), 'ai_sources', ['chunk_id'], unique=False)
     op.create_table('decisions',
     sa.Column('group_id', sa.String(length=36), nullable=False),
     sa.Column('discussion_id', sa.String(length=36), nullable=True),
@@ -282,7 +269,7 @@ def upgrade() -> None:
     sa.Column('created_by', sa.String(length=36), nullable=True),
     sa.Column('confirmed_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('id', sa.String(length=36), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     sa.ForeignKeyConstraint(['created_by'], ['users.id'], ondelete='SET NULL'),
     sa.ForeignKeyConstraint(['discussion_id'], ['discussions.id'], ondelete='SET NULL'),
     sa.ForeignKeyConstraint(['group_id'], ['groups.id'], ondelete='CASCADE'),
@@ -299,9 +286,9 @@ def upgrade() -> None:
     sa.Column('owner_name', sa.String(length=255), nullable=True),
     sa.Column('status', sa.Enum('open', 'in_progress', 'done', name='actionitemstatus'), nullable=False),
     sa.Column('source', sa.Enum('group_discussion', 'meeting', name='actionitemsource'), nullable=False),
-    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     sa.Column('id', sa.String(length=36), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     sa.ForeignKeyConstraint(['decision_id'], ['decisions.id'], ondelete='SET NULL'),
     sa.ForeignKeyConstraint(['group_id'], ['groups.id'], ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['meeting_id'], ['meetings.id'], ondelete='SET NULL'),
@@ -309,15 +296,30 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_action_items_group_id'), 'action_items', ['group_id'], unique=False)
+    op.create_table('oauth_states',
+    sa.Column('state', sa.String(length=128), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+    sa.Column('expires_at', sa.DateTime(timezone=True), nullable=False),
+    sa.PrimaryKeyConstraint('state')
+    )
+    op.create_table('revoked_tokens',
+    sa.Column('jti', sa.String(length=64), nullable=False),
+    sa.Column('revoked_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+    sa.Column('expires_at', sa.DateTime(timezone=True), nullable=False),
+    sa.PrimaryKeyConstraint('jti')
+    )
     # ### end Alembic commands ###
 
 
 def downgrade() -> None:
     # ### commands auto generated by Alembic - please adjust! ###
+    op.drop_table('revoked_tokens')
+    op.drop_table('oauth_states')
     op.drop_index(op.f('ix_action_items_group_id'), table_name='action_items')
     op.drop_table('action_items')
     op.drop_index(op.f('ix_decisions_group_id'), table_name='decisions')
     op.drop_table('decisions')
+    op.drop_index(op.f('ix_ai_sources_chunk_id'), table_name='ai_sources')
     op.drop_index(op.f('ix_ai_sources_ai_response_id'), table_name='ai_sources')
     op.drop_table('ai_sources')
     op.drop_index(op.f('ix_feedback_user_id'), table_name='feedback')
@@ -327,11 +329,6 @@ def downgrade() -> None:
     op.drop_table('discussions')
     op.drop_index(op.f('ix_ai_responses_message_id'), table_name='ai_responses')
     op.drop_table('ai_responses')
-    op.drop_index('ix_transcript_chunks_speaker', table_name='transcript_chunks')
-    op.drop_index('ix_transcript_chunks_meeting_speaker', table_name='transcript_chunks')
-    op.drop_index(op.f('ix_transcript_chunks_meeting_id'), table_name='transcript_chunks')
-    op.drop_index('ix_transcript_chunks_meeting', table_name='transcript_chunks')
-    op.drop_table('transcript_chunks')
     op.drop_index('ix_messages_group', table_name='messages')
     op.drop_index('ix_messages_conversation', table_name='messages')
     op.drop_table('messages')

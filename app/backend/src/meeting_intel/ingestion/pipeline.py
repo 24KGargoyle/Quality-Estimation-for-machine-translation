@@ -30,14 +30,15 @@ from meeting_intel.db.models import (
     MeetingStatus,
     MeetingTranscript,
     ParticipantRole,
-    TranscriptChunk,
     TranscriptSource,
     User,
 )
-from meeting_intel.embeddings.embedder import embed_texts
 from meeting_intel.graph.client import GraphMeetingNotFoundError, get_graph_client
 from meeting_intel.ingestion.chunker import chunk_cues
 from meeting_intel.ingestion.transcript_parser import parse_vtt
+from meeting_intel.providers import get_embedding_provider
+from meeting_intel.retrieval.hybrid_search import get_search_provider
+from meeting_intel.retrieval.search_provider import IndexableChunk
 
 logger = logging.getLogger("meeting_intel.ingestion")
 
@@ -86,20 +87,26 @@ async def _index_transcript_text(
     db.add(transcript)
     await db.flush()
 
-    vectors = embed_texts([c.text for c in chunks])
-    for chunk, vector in zip(chunks, vectors):
-        db.add(
-            TranscriptChunk(
-                meeting_id=meeting.id,
-                transcript_id=transcript.id,
-                chunk_index=chunk.chunk_index,
-                speaker=chunk.speaker,
-                start_seconds=chunk.start_seconds,
-                end_seconds=chunk.end_seconds,
-                text=chunk.text,
-                embedding=vector,
-            )
+    vectors = get_embedding_provider().embed_texts([c.text for c in chunks])
+    indexable = [
+        IndexableChunk(
+            id=f"{meeting.id}:{chunk.chunk_index}",
+            tenant_id=meeting.tenant_id,
+            meeting_id=meeting.id,
+            meeting_join_id=meeting.ms_meeting_id,
+            meeting_title=meeting.title,
+            speaker_name=chunk.speaker,
+            start_time=chunk.start_seconds,
+            end_time=chunk.end_seconds,
+            content=chunk.text,
+            chunk_index=chunk.chunk_index,
+            source=source.value,
+            document_id=transcript.id,
+            embedding=vector,
         )
+        for chunk, vector in zip(chunks, vectors)
+    ]
+    await get_search_provider().index_chunks(indexable)
 
     speakers = {c.speaker for c in cues if c.speaker}
     existing = {

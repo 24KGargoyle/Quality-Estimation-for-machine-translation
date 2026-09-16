@@ -1,24 +1,21 @@
 # Deployment
 
-No Docker is used for this platform — it runs directly with a local Postgres install, a Python
-virtualenv for the backend, and Node/npm for the frontend. These are the exact commands used to
-build and verify it.
+No Docker is used for this platform — it runs directly with SQLite (zero external database
+server, local development and tests), a Python virtualenv for the backend, and Node/npm for the
+frontend. **No PostgreSQL install is required anywhere** — see
+`docs/MIGRATION_FROM_POSTGRES.md`. Production targets Azure SQL Database, Azure AI Search, and
+Azure OpenAI; see `docs/AZURE_SETUP.md` for provisioning those.
 
-## 1. Database
+## 1. Database (local/dev — no setup required)
 
 ```bash
-# Plain PostgreSQL 16 — no extension needed. This app does not use the `pgvector`
-# Postgres extension: it has no plain installer on Windows (has to be compiled from
-# source with MSVC), which would otherwise force Docker or WSL2 on Windows machines.
-# Embedding similarity is computed in Python instead (numpy) — see docs/RAG_ARCHITECTURE.md.
-sudo apt-get install -y postgresql-16   # if not already installed
-sudo service postgresql start
-sudo -u postgres psql -c "CREATE USER meeting_intel WITH PASSWORD 'meeting_intel' CREATEDB;"
-sudo -u postgres psql -c "CREATE DATABASE meeting_intel OWNER meeting_intel;"
+# Nothing to install. SQLite is created automatically on first run/migration
+# at app/backend/data/meeting_intel.db (the parent directory is created
+# automatically by ensure_sqlite_parent_dir() in config.py).
 ```
 
-On macOS: `brew install postgresql@16`. On Windows: install PostgreSQL with the official
-EDB installer (postgresql.org/download/windows) — no WSL2, no Docker, no compiling anything.
+For production, set `AZURE_SQL_CONNECTION_STRING` instead — see `docs/AZURE_SETUP.md` for the
+exact connection string and the required async ODBC driver.
 
 ## 2. Backend
 
@@ -31,21 +28,17 @@ alembic upgrade head
 uvicorn meeting_intel.main:app --app-dir src --reload --port 8000
 ```
 
-`pyproject.toml` declares `requires-python = ">=3.11"`. The full test suite (30 tests) was
-verified passing on both Python 3.11.15 and Python 3.14.7 with the exact pins in
-`requirements.txt` — `asyncpg`, `pydantic`/`pydantic-core`, `pydantic-settings`, and `sqlalchemy`
-are pinned at versions confirmed to ship 3.14 wheels/support (older pins built cleanly on 3.11
-but failed to build from source on 3.14, since no prebuilt wheel existed for those versions
-there). `psycopg2-binary` and `aiosqlite` were removed — the app only ever uses the async
-`asyncpg` driver, and those two packages were unused dead weight (the former also has no 3.14
-wheel for the pinned version, which is what surfaced the issue).
+`pyproject.toml` declares `requires-python = ">=3.11"`. The full test suite (58 tests) passes on
+Python 3.11 with the exact pins in `requirements.txt` — `aiosqlite` (async SQLite driver) and
+`openai` (Azure OpenAI SDK) were added; `asyncpg`, `psycopg2-binary`, and any other
+PostgreSQL-specific driver were removed entirely — nothing in this app connects to PostgreSQL.
 
 Health check: `curl http://localhost:8000/health` → `{"status":"ok", "graph_configured":..., "llm_configured":..., "auth_provider":...}`.
 
-`sentence-transformers` (used for local embeddings) pulls in PyTorch — a sizeable dependency
-(roughly 1-2GB on first install). If that's a problem, `embeddings/embedder.py`'s two functions
-(`embed_texts`/`embed_query`) can be swapped for a hosted embeddings API call without touching
-any caller.
+`sentence-transformers` (used for the default local embedding provider) pulls in PyTorch — a
+sizeable dependency (roughly 1-2GB on first install). Set `EMBEDDING_PROVIDER=azure_openai` (with
+the `AZURE_OPENAI_*` settings) to use Azure OpenAI embeddings instead, avoiding that dependency —
+see `providers.py`.
 
 ## 3. Frontend
 
@@ -56,16 +49,21 @@ cp .env.example .env.local   # NEXT_PUBLIC_API_BASE_URL, defaults to http://loca
 npm run dev
 ```
 
-Open `http://localhost:3000`.
+Open `http://localhost:3000`. No frontend changes were needed for the PostgreSQL removal — every
+API response shape (Pydantic schemas) is unchanged; only the backend's internal storage moved.
 
 ## 4. Tests
 
 ```bash
 cd app/backend
-sudo -u postgres psql -c "CREATE DATABASE meeting_intel_test OWNER meeting_intel;"
 source .venv/bin/activate
 python -m pytest -q
 ```
+
+No database server setup is required — tests run against a real, isolated, temporary SQLite file
+per test session (`tests/conftest.py`), and search-layer tests run against the in-memory
+`SearchProvider` (reset between tests) plus mocked HTTP for the Azure AI Search client. See
+`docs/TESTING.md`.
 
 ## Configuring real Microsoft Entra ID / Graph
 
@@ -76,11 +74,24 @@ python -m pytest -q
 3. No code changes are required — `graph_configured` flips to `true` and `/health` reflects it;
    the frontend's Settings page surfaces the same status.
 
-## Configuring the LLM
+## Configuring the LLM and embeddings
 
-Set `ANTHROPIC_API_KEY` in `app/backend/.env`. `LLM_MODEL` defaults to `claude-sonnet-5`.
-Without a key, chat/discussion/decision endpoints degrade gracefully (explicit "AI model is not
-configured" message) rather than crashing or fabricating answers — see `IMPLEMENTATION_REPORT.md`.
+- **Anthropic (default)**: set `ANTHROPIC_API_KEY` in `app/backend/.env`. `LLM_MODEL` defaults to
+  `claude-sonnet-5`.
+- **Azure OpenAI**: set `LLM_PROVIDER=azure_openai` and/or `EMBEDDING_PROVIDER=azure_openai`,
+  plus the `AZURE_OPENAI_*` settings — see `docs/AZURE_SETUP.md`.
+
+Without credentials for whichever provider is selected, chat/discussion/decision endpoints
+degrade gracefully (explicit "AI model is not configured" message) rather than crashing or
+fabricating answers.
+
+## Configuring search (RAG)
+
+- **In-memory (default, `SEARCH_PROVIDER=memory`)**: no setup, real working hybrid search for
+  local dev/tests — **not** Azure AI Search, never presented as such.
+- **Azure AI Search (`SEARCH_PROVIDER=azure_search`)**: set `AZURE_SEARCH_ENDPOINT`,
+  `AZURE_SEARCH_API_KEY`, `AZURE_SEARCH_INDEX` — see `docs/AZURE_SETUP.md`. The index is created/
+  updated automatically (`ensure_index()`) on first write.
 
 ## Running as long-lived services (production-ish, still no Docker)
 
@@ -90,29 +101,33 @@ configured" message) rather than crashing or fabricating answers — see `IMPLEM
   (nginx, Caddy) in front for TLS.
 - **Frontend**: `npm run build && npm run start` (Next.js's own production server), also under a
   supervisor, behind the same reverse proxy.
-- **Database**: a managed Postgres instance (e.g. Azure Database for PostgreSQL, Amazon RDS, or
-  a self-managed instance) rather than the local install used above — no extension requirement
-  to worry about, since this app uses plain Postgres.
+- **Database**: Azure SQL Database (`AZURE_SQL_CONNECTION_STRING`) rather than the local SQLite
+  file used above — see `docs/AZURE_SETUP.md` for the connection string format and the required
+  async-capable ODBC driver.
+- **Search**: Azure AI Search (`SEARCH_PROVIDER=azure_search`) rather than the in-memory dev
+  provider — see `docs/AZURE_SETUP.md`.
 
 ## Production notes / gaps to close before a real rollout
 
 - **WebSocket fan-out** (`realtime/ws_manager.py`) is in-process; running more than one backend
   instance needs a shared layer (Redis pub/sub or equivalent) so a message posted via one
   instance reaches a client connected to another.
-- **Transcript storage**: raw VTT text is stored inline in `meeting_transcripts.storage_ref`
-  (Postgres `TEXT`) for this scope; a production deployment should move this to blob storage
-  (e.g. Azure Blob Storage, matching the Teams-native ecosystem) and store a reference instead.
+- **Transcript storage**: raw VTT text is stored inline in `meeting_transcripts.storage_ref` for
+  this scope; a production deployment should move this to blob storage (e.g. Azure Blob Storage,
+  matching the Teams-native ecosystem) and store a reference instead.
 - **Embeddings model**: `sentence-transformers/all-MiniLM-L6-v2` runs locally (no external API
-  key), at the cost of the PyTorch dependency size/install time noted above. A hosted embeddings
-  API can be swapped in behind `embeddings/embedder.py`'s two functions without touching callers.
-- **Vector similarity**: computed in Python (numpy) rather than via the `pgvector` Postgres
-  extension, which has no plain installer on Windows — see docs/RAG_ARCHITECTURE.md. This is
-  fine at meeting-transcript scale (at most a few hundred chunks per search scope) but doesn't
-  scale to millions of chunks; re-introducing `pgvector` (or a dedicated vector DB) behind
-  `retrieval/hybrid_search.py`'s existing interface is the fix if that scale is ever reached.
+  key) by default, at the cost of the PyTorch dependency size/install time noted above. Azure
+  OpenAI embeddings are a real, alternate, drop-in `EmbeddingProvider` — see `providers.py`.
+- **Azure SQL / Azure AI Search / Azure OpenAI**: real implementations exist behind their
+  respective abstractions but have **not been live-tested against actual Azure resources** in
+  this environment (none are available here) — see `docs/AZURE_SETUP.md` and the final
+  implementation report's stated limitations. Provision the resources, set the corresponding
+  environment variables, and run the app's own health/smoke checks against them before relying on
+  this in production.
 - **Secrets**: use the platform's secret manager (Azure Key Vault, AWS Secrets Manager, a `.env`
   injected by the supervisor, etc.) to provide `SECRET_KEY`, `MS_CLIENT_SECRET`,
-  `ANTHROPIC_API_KEY` as environment variables at deploy time — never commit them.
+  `ANTHROPIC_API_KEY`/`AZURE_OPENAI_API_KEY`/`AZURE_SEARCH_API_KEY`,
+  `AZURE_SQL_CONNECTION_STRING` as environment variables at deploy time — never commit them.
 - **Database migrations**: run `alembic upgrade head` as an explicit release step before starting
   new backend processes, rather than automatically on every process start, once there's more than
   one backend instance.
