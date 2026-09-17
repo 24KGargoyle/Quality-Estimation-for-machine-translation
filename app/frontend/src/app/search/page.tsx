@@ -11,6 +11,17 @@ function fmtTs(seconds: number) {
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
+function resultLabel(r: SearchResult): string {
+  if (r.document_type === "transcript" || !r.source_file) {
+    return `${r.speaker || "Unknown"} · ${fmtTs(r.start_seconds)}`;
+  }
+  if (r.page_number != null) return `${r.source_file} · Page ${r.page_number}`;
+  if (r.sheet_name) return `${r.source_file} · Sheet: ${r.sheet_name}`;
+  if (r.slide_number != null) return `${r.source_file} · Slide ${r.slide_number}`;
+  if (r.section) return `${r.source_file} · Section: ${r.section}`;
+  return r.source_file;
+}
+
 function SearchContent() {
   const [meetings, setMeetings] = useState<MeetingSummary[]>([]);
   const [meetingId, setMeetingId] = useState("");
@@ -77,9 +88,7 @@ function SearchContent() {
       <div className="mt-6 space-y-2">
         {results.map((r) => (
           <div key={r.chunk_id} className="rounded-lg border border-neutral-200 bg-white p-3 text-sm dark:border-neutral-800 dark:bg-neutral-900">
-            <div className="text-xs font-medium text-neutral-500">
-              {r.speaker || "Unknown"} · {fmtTs(r.start_seconds)}
-            </div>
+            <div className="text-xs font-medium text-neutral-500">{resultLabel(r)}</div>
             <div className="mt-1">{r.text}</div>
           </div>
         ))}

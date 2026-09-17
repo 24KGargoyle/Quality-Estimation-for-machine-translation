@@ -18,8 +18,9 @@ python train_qe_regression.py
 
 ## 2. Teams Meeting Intelligence platform (`app/`)
 
-A separate application: Microsoft Teams meeting transcripts → retrieval-augmented Q&A, group
-discussion, and decision/action-item tracking, built on FastAPI + Next.js.
+A separate application: Microsoft Teams meeting transcripts *and* historical meeting folders
+(Word/Excel/PDF/PowerPoint/CSV/text) → retrieval-augmented Q&A, group discussion, and
+decision/action-item tracking, built on FastAPI + Next.js.
 
 ```
 Microsoft Teams ── Graph API ── FastAPI backend (Entra ID auth, meeting ingestion, AI agents)
@@ -72,8 +73,9 @@ production use.
 |---|---|
 | `docs/ARCHITECTURE.md` | Component overview, directory layout, request flow, known limitations |
 | `docs/DATABASE.md` | Schema, tables, migrations, tenant isolation |
-| `docs/RAG_ARCHITECTURE.md` | Ingestion, the `SearchProvider` abstraction, retrieval, grounding/citations |
-| `docs/AZURE_SETUP.md` | Provisioning Azure SQL Database, Azure AI Search, Azure OpenAI |
+| `docs/RAG_ARCHITECTURE.md` | Ingestion (live + historical), the `SearchProvider` abstraction, retrieval, grounding/citations |
+| `docs/HISTORICAL_IMPORT.md` | Historical Meeting Data Import: supported formats, parser architecture, meeting association, duplicate detection, security |
+| `docs/AZURE_SETUP.md` | Provisioning Azure SQL Database, Azure AI Search, Azure OpenAI, Azure Blob Storage |
 | `docs/MIGRATION_FROM_POSTGRES.md` | What changed when PostgreSQL was removed, and why (historical) |
 | `docs/TEAMS_INTEGRATION.md` | Graph/Teams meeting resolution, authorization, Entra ID security, Teams messaging |
 | `docs/MICROSOFT_GRAPH_PERMISSIONS.md` | Exact Graph app registration and permissions |
@@ -84,6 +86,7 @@ production use.
 | `docs/API.md` | API reference |
 | `docs/FEEDBACK_AND_EVALUATION.md` | Feedback pipeline |
 | `ARCHITECTURE_ASSESSMENT.md`, `IMPLEMENTATION_REPORT.md` | Original pre-implementation assessment and initial build report (predate the PostgreSQL removal — see `docs/MIGRATION_FROM_POSTGRES.md` for what changed since) |
+| `docs/audits/PRE_UPGRADE_AUDIT.md`, `docs/audits/POST_UPGRADE_AUDIT.md` | Before/after audit for the Historical Meeting Data Import upgrade |
 
 ### Tests
 
@@ -93,4 +96,4 @@ source .venv/bin/activate
 python -m pytest -q
 ```
 
-58 tests, no external database or Azure resource required — see `docs/TESTING.md`.
+107 tests, no external database or Azure resource required — see `docs/TESTING.md`.

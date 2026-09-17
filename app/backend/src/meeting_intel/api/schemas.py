@@ -64,12 +64,27 @@ class MeetingSummary(BaseModel):
     transcript_available: bool
     recording_available: bool
     status: str
+    is_historical: bool = False
+    document_count: int = 0
+
+    model_config = {"from_attributes": True}
+
+
+class HistoricalDocumentSchema(BaseModel):
+    id: str
+    source_file: str
+    relative_path: str
+    file_type: str
+    document_type: str
+    chunk_count: int
+    created_at: datetime
 
     model_config = {"from_attributes": True}
 
 
 class MeetingDetail(MeetingSummary):
     participants: list[ParticipantSchema]
+    documents: list[HistoricalDocumentSchema] = []
 
 
 # --- Chat / sources ---
@@ -81,6 +96,14 @@ class SourceSchema(BaseModel):
     end_timestamp: str
     excerpt: str
     source: str = "Meeting transcript"
+    # Historical-document citation metadata — null for a transcript source.
+    source_file: str | None = None
+    file_type: str = "vtt"
+    document_type: str = "transcript"
+    page_number: int | None = None
+    sheet_name: str | None = None
+    slide_number: int | None = None
+    section: str | None = None
 
 
 class ChatRequest(BaseModel):
@@ -198,3 +221,40 @@ class FeedbackRequest(BaseModel):
     rating: str = Field(pattern="^(up|down)$")
     reason: str | None = None
     comment: str | None = None
+
+
+# --- Historical Meeting Data Import ---
+
+
+class ImportJobSummary(BaseModel):
+    id: str
+    status: str
+    total_files: int
+    processed_files: int
+    successful_files: int
+    skipped_files: int
+    failed_files: int
+    current_file: str | None
+    created_at: datetime
+    created_by: str
+
+    model_config = {"from_attributes": True}
+
+
+class ImportedFileResultSchema(BaseModel):
+    filename: str
+    relative_path: str
+    file_type: str
+    status: str
+    reason: str | None
+    recommended_action: str | None
+    document_id: str | None
+    meeting_id: str | None
+    chunk_count: int
+
+    model_config = {"from_attributes": True}
+
+
+class ImportJobResults(BaseModel):
+    job: ImportJobSummary
+    results: list[ImportedFileResultSchema]

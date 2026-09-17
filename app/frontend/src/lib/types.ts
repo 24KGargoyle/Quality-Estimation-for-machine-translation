@@ -17,6 +17,8 @@ export interface MeetingSummary {
   transcript_available: boolean;
   recording_available: boolean;
   status: string;
+  is_historical: boolean;
+  document_count: number;
 }
 
 export interface ParticipantSchema {
@@ -24,8 +26,19 @@ export interface ParticipantSchema {
   role: string;
 }
 
+export interface HistoricalDocumentSchema {
+  id: string;
+  source_file: string;
+  relative_path: string;
+  file_type: string;
+  document_type: string;
+  chunk_count: number;
+  created_at: string;
+}
+
 export interface MeetingDetail extends MeetingSummary {
   participants: ParticipantSchema[];
+  documents: HistoricalDocumentSchema[];
 }
 
 export interface SourceSchema {
@@ -34,6 +47,13 @@ export interface SourceSchema {
   end_timestamp: string;
   excerpt: string;
   source: string;
+  source_file: string | null;
+  file_type: string;
+  document_type: string;
+  page_number: number | null;
+  sheet_name: string | null;
+  slide_number: number | null;
+  section: string | null;
 }
 
 export interface ChatResponse {
@@ -119,6 +139,43 @@ export interface SearchResult {
   end_seconds: number;
   text: string;
   score: number;
+  source_file: string | null;
+  file_type: string;
+  document_type: string;
+  page_number: number | null;
+  sheet_name: string | null;
+  slide_number: number | null;
+  section: string | null;
+}
+
+export interface ImportJobSummary {
+  id: string;
+  status: "queued" | "processing" | "completed" | "completed_with_warnings" | "failed";
+  total_files: number;
+  processed_files: number;
+  successful_files: number;
+  skipped_files: number;
+  failed_files: number;
+  current_file: string | null;
+  created_at: string;
+  created_by: string;
+}
+
+export interface ImportedFileResultSchema {
+  filename: string;
+  relative_path: string;
+  file_type: string;
+  status: "success" | "skipped" | "failed" | "duplicate";
+  reason: string | null;
+  recommended_action: string | null;
+  document_id: string | null;
+  meeting_id: string | null;
+  chunk_count: number;
+}
+
+export interface ImportJobResults {
+  job: ImportJobSummary;
+  results: ImportedFileResultSchema[];
 }
 
 export interface SuggestedDecision {

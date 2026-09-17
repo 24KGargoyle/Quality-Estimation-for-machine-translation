@@ -99,6 +99,15 @@ class Settings(BaseSettings):
     retrieval_top_k: int = 8
     retrieval_min_score: float = 0.15
 
+    # --- Historical Meeting Data Import ---
+    # "local" (default): a real, working on-disk store for dev/tests — NOT
+    #   Azure Blob Storage. "azure_blob": a real Azure Blob Storage REST
+    #   client, inert without AZURE_STORAGE_CONTAINER_SAS_URL.
+    file_storage: Literal["local", "azure_blob"] = "local"
+    local_blob_storage_dir: str = "./data/historical_blobs"
+    azure_storage_container_sas_url: str | None = None
+    import_max_concurrency: int = 4
+
     # --- CORS ---
     cors_origins: str = "http://localhost:3000"
 

@@ -13,6 +13,7 @@ dict), not the algorithm.
 from __future__ import annotations
 
 from collections import defaultdict
+from dataclasses import replace
 from threading import RLock
 
 import numpy as np
@@ -67,6 +68,9 @@ class InMemorySearchProvider(SearchProvider):
         return SearchHit(
             id=chunk.id, meeting_id=chunk.meeting_id, content=chunk.content, chunk_index=chunk.chunk_index,
             start_time=chunk.start_time, end_time=chunk.end_time, speaker_name=chunk.speaker_name, score=score,
+            source_file=chunk.source_file, relative_path=chunk.relative_path, file_type=chunk.file_type,
+            document_type=chunk.document_type, page_number=chunk.page_number, sheet_name=chunk.sheet_name,
+            slide_number=chunk.slide_number, section=chunk.section,
         )
 
     async def chunks_for_meeting(self, *, tenant_id: str, meeting_id: str) -> list[SearchHit]:
@@ -121,23 +125,19 @@ class InMemorySearchProvider(SearchProvider):
             else []
         )
 
+        # `replace()` carries every SearchHit field (including citation
+        # metadata like page_number/sheet_name/section) forward automatically
+        # — a manual field-by-field copy silently drops new fields whenever
+        # SearchHit grows one, which is exactly the bug this once was.
         fused: dict[str, SearchHit] = {}
         for rank, hit in enumerate(vector_hits, start=1):
-            fused[hit.id] = SearchHit(
-                id=hit.id, meeting_id=hit.meeting_id, content=hit.content, chunk_index=hit.chunk_index,
-                start_time=hit.start_time, end_time=hit.end_time, speaker_name=hit.speaker_name,
-                score=_rrf(rank), vector_rank=rank,
-            )
+            fused[hit.id] = replace(hit, score=_rrf(rank), vector_rank=rank, keyword_rank=None)
         for rank, hit in enumerate(keyword_hits, start=1):
             if hit.id in fused:
                 fused[hit.id].score += _rrf(rank)
                 fused[hit.id].keyword_rank = rank
             else:
-                fused[hit.id] = SearchHit(
-                    id=hit.id, meeting_id=hit.meeting_id, content=hit.content, chunk_index=hit.chunk_index,
-                    start_time=hit.start_time, end_time=hit.end_time, speaker_name=hit.speaker_name,
-                    score=_rrf(rank), keyword_rank=rank,
-                )
+                fused[hit.id] = replace(hit, score=_rrf(rank), keyword_rank=rank, vector_rank=None)
 
         ranked = sorted(fused.values(), key=lambda h: h.score, reverse=True)
         return ranked[:top_k]

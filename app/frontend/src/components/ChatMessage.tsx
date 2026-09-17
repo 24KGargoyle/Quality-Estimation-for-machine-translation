@@ -2,8 +2,19 @@
 
 import { useState } from "react";
 import { api, ApiError } from "@/lib/api";
-import { MessageSchema } from "@/lib/types";
+import { MessageSchema, SourceSchema } from "@/lib/types";
 import ShareToGroupModal from "./ShareToGroupModal";
+
+function sourceLabel(s: SourceSchema): string {
+  if (s.document_type === "transcript" || !s.source_file) {
+    return `Speaker: ${s.speaker || "Unknown"} · Timestamp: ${s.start_timestamp} · Source: Meeting transcript`;
+  }
+  if (s.page_number != null) return `File: ${s.source_file} · Page: ${s.page_number}`;
+  if (s.sheet_name) return `File: ${s.source_file} · Sheet: ${s.sheet_name}`;
+  if (s.slide_number != null) return `File: ${s.source_file} · Slide: ${s.slide_number}`;
+  if (s.section) return `File: ${s.source_file} · Section: ${s.section}`;
+  return `File: ${s.source_file}`;
+}
 
 const REASONS = [
   { value: "incorrect_answer", label: "Incorrect answer" },
@@ -53,9 +64,7 @@ export default function ChatMessage({ message }: { message: MessageSchema }) {
           <div className="mt-3 space-y-2 border-t border-neutral-100 pt-2 dark:border-neutral-800">
             {message.sources.map((s, i) => (
               <div key={i} className="rounded-md bg-neutral-50 px-2.5 py-1.5 text-xs dark:bg-neutral-800/60">
-                <div className="font-medium text-neutral-600 dark:text-neutral-300">
-                  Speaker: {s.speaker || "Unknown"} · Timestamp: {s.start_timestamp} · Source: {s.source}
-                </div>
+                <div className="font-medium text-neutral-600 dark:text-neutral-300">{sourceLabel(s)}</div>
                 <div className="mt-0.5 text-neutral-500 dark:text-neutral-400">&ldquo;{s.excerpt}&rdquo;</div>
               </div>
             ))}

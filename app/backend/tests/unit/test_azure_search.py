@@ -83,6 +83,8 @@ async def test_ensure_index_sends_expected_schema_and_vector_dimensions(monkeypa
         "id", "tenant_id", "meeting_id", "meeting_join_id", "meeting_title", "meeting_date",
         "speaker_id", "speaker_name", "start_time", "end_time", "content", "content_type",
         "chunk_index", "source", "document_id", "embedding",
+        "source_file", "relative_path", "file_type", "document_type",
+        "page_number", "sheet_name", "slide_number", "section",
     }
     embedding_field = next(f for f in call["json"]["fields"] if f["name"] == "embedding")
     assert embedding_field["dimensions"] == 384

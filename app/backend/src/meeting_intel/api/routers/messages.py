@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from meeting_intel.agents.prompts import source_label
 from meeting_intel.api.schemas import FeedbackRequest, ShareToGroupRequest
 from meeting_intel.auth.deps import RequestContext, get_current_context
 from meeting_intel.conversations.provider import get_provider
@@ -125,10 +126,11 @@ async def share_message(
     card_lines += [f"Topic: {topic}", ""]
     if sources:
         s = sources[0]
-        card_lines += [f"{s.speaker or 'Unknown'} — {_fmt_ts(s.start_seconds)}", "", s.excerpt, ""]
+        card_lines += [source_label(s), "", s.excerpt, ""]
     if question:
         card_lines += [f"Question: {question}", ""]
-    card_lines += [message.content, "", "Source: Meeting transcript"]
+    source_line = f"Source:\n{source_label(sources[0])}" if sources else "Source: Meeting transcript"
+    card_lines += [message.content, "", source_line]
     card_text = "\n".join(card_lines)
 
     discussion = Discussion(

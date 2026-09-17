@@ -34,6 +34,11 @@ If Graph is not configured (`graph_configured=false` — no `MS_TENANT_ID`/`MS_C
 `tests/integration/test_meeting_ingestion.py::test_graph_not_configured_returns_503_without_fabricating_data`.
 A manual-upload path (`POST /api/meetings/load` with `transcript_vtt` supplied directly) exists
 for meetings whose transcript isn't reachable via Graph, or for development without a live tenant.
+A third path, **Historical Meeting Data Import** (`POST /api/historical-imports`, see
+`docs/HISTORICAL_IMPORT.md`), ingests a whole folder of past transcripts and supporting documents
+in one batch — all three paths converge on the same indexing pipeline
+(`retrieval/search_provider.SearchProvider`), so a historical meeting behaves identically to a
+live one everywhere else in the app (chat, search, decisions, action items, feedback, sharing).
 
 ## Authorization — never trusting client-supplied identifiers
 

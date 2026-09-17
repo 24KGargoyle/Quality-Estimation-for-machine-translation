@@ -105,6 +105,13 @@ async def chat(
                 end_seconds=s.end_seconds,
                 excerpt=s.excerpt,
                 score=s.score,
+                source_file=s.source_file,
+                file_type=s.file_type,
+                document_type=s.document_type,
+                page_number=s.page_number,
+                sheet_name=s.sheet_name,
+                slide_number=s.slide_number,
+                section=s.section,
             )
         )
         sources_out.append(
@@ -113,6 +120,14 @@ async def chat(
                 start_timestamp=_fmt_ts(s.start_seconds),
                 end_timestamp=_fmt_ts(s.end_seconds),
                 excerpt=s.excerpt,
+                source=s.source_file or "Meeting transcript",
+                source_file=s.source_file,
+                file_type=s.file_type,
+                document_type=s.document_type,
+                page_number=s.page_number,
+                sheet_name=s.sheet_name,
+                slide_number=s.slide_number,
+                section=s.section,
             )
         )
 
@@ -183,6 +198,14 @@ async def get_conversation(
                         start_timestamp=_fmt_ts(s.start_seconds),
                         end_timestamp=_fmt_ts(s.end_seconds),
                         excerpt=s.excerpt,
+                        source=s.source_file or "Meeting transcript",
+                        source_file=s.source_file,
+                        file_type=s.file_type or "vtt",
+                        document_type=s.document_type or "transcript",
+                        page_number=s.page_number,
+                        sheet_name=s.sheet_name,
+                        slide_number=s.slide_number,
+                        section=s.section,
                     )
                     for s in src_rows
                 ]

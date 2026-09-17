@@ -36,6 +36,13 @@ class SourceCitation:
     start_seconds: float
     end_seconds: float
     score: float
+    source_file: str | None = None
+    file_type: str = "vtt"
+    document_type: str = "transcript"
+    page_number: int | None = None
+    sheet_name: str | None = None
+    slide_number: int | None = None
+    section: str | None = None
 
 
 @dataclass
@@ -50,36 +57,22 @@ class AnswerResult:
     retrieval_query: str | None = None
 
 
+def _to_citation(rc: RetrievedChunk) -> SourceCitation:
+    c = rc.chunk
+    return SourceCitation(
+        chunk=c, excerpt=c.text, speaker=c.speaker, start_seconds=c.start_seconds, end_seconds=c.end_seconds,
+        score=rc.score, source_file=c.source_file, file_type=c.file_type, document_type=c.document_type,
+        page_number=c.page_number, sheet_name=c.sheet_name, slide_number=c.slide_number, section=c.section,
+    )
+
+
 def _parse_citations(text: str, chunks: list[RetrievedChunk]) -> list[SourceCitation]:
     cited_indices = sorted({int(m) for m in _CITATION_RE.findall(text)})
-    sources = []
-    for idx in cited_indices:
-        if 1 <= idx <= len(chunks):
-            rc = chunks[idx - 1]
-            sources.append(
-                SourceCitation(
-                    chunk=rc.chunk,
-                    excerpt=rc.chunk.text,
-                    speaker=rc.chunk.speaker,
-                    start_seconds=rc.chunk.start_seconds,
-                    end_seconds=rc.chunk.end_seconds,
-                    score=rc.score,
-                )
-            )
+    sources = [_to_citation(chunks[idx - 1]) for idx in cited_indices if 1 <= idx <= len(chunks)]
     # If the model didn't cite anything but excerpts were used, fall back to top excerpt
     # so the user still sees where the answer likely came from.
     if not sources and chunks:
-        rc = chunks[0]
-        sources.append(
-            SourceCitation(
-                chunk=rc.chunk,
-                excerpt=rc.chunk.text,
-                speaker=rc.chunk.speaker,
-                start_seconds=rc.chunk.start_seconds,
-                end_seconds=rc.chunk.end_seconds,
-                score=rc.score,
-            )
-        )
+        sources.append(_to_citation(chunks[0]))
     return sources
 
 

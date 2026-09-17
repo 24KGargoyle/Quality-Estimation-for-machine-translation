@@ -7,7 +7,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from meeting_intel.api.routers import auth, chat, discussions, groups, meetings, messages
+from meeting_intel.api.routers import auth, chat, discussions, groups, historical_imports, meetings, messages
 from meeting_intel.config import get_settings
 
 settings = get_settings()
@@ -65,6 +65,7 @@ app.include_router(groups.router)
 app.include_router(messages.router)
 app.include_router(messages.feedback_router)
 app.include_router(discussions.router)
+app.include_router(historical_imports.router)
 
 
 @app.get("/health")

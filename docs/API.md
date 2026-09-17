@@ -20,11 +20,22 @@ Request/response bodies are typed via Pydantic schemas in `app/backend/src/meeti
 
 | Endpoint | Method | Description |
 |---|---|---|
-| `/api/meetings/load` | POST | `{meeting_id, organizer_email?, title?, transcript_vtt?}`. Without `transcript_vtt`, attempts real Microsoft Graph lookup (`503` if Graph isn't configured). With `transcript_vtt`, uses the manual-upload ingestion path. Indexes the transcript synchronously and returns the meeting. |
-| `/api/meetings` | GET | Meetings the caller is authorized to see (organizer, participant, or tenant admin). |
-| `/api/meetings/{meeting_id}` | GET | Meeting detail + participants. `404` if not found or not authorized (identical response either way — existence is never revealed to an unauthorized caller). |
-| `/api/meetings/{meeting_id}/search` | GET | `?q=...` — direct hybrid search over one meeting's transcript, no LLM call. Powers the Search tab. |
-| `/api/meetings/{meeting_id}/sources` | GET | All transcript chunks for a meeting (raw source browser). |
+| `/api/meetings/load` | POST | `{meeting_id, title?, transcript_vtt?}`. Without `transcript_vtt`, attempts real Microsoft Graph lookup (`503` if Graph isn't configured). With `transcript_vtt`, uses the manual-upload ingestion path. Indexes the transcript synchronously and returns the meeting. |
+| `/api/meetings` | GET | Meetings the caller is authorized to see (organizer, participant, or tenant admin), live and historical alike. Each includes `is_historical` and `document_count`. |
+| `/api/meetings/{meeting_id}` | GET | Meeting detail + participants + `documents` (supporting files imported via Historical Meeting Data Import, if any). `404` if not found or not authorized (identical response either way — existence is never revealed to an unauthorized caller). |
+| `/api/meetings/{meeting_id}/search` | GET | `?q=...` — direct hybrid search over one meeting's transcript **and** any imported documents, no LLM call. Powers the Search tab. Each result includes citation metadata (`source_file`, `file_type`, `document_type`, `page_number`, `sheet_name`, `slide_number`, `section`). |
+| `/api/meetings/{meeting_id}/sources` | GET | All indexed chunks for a meeting — transcript and documents alike (raw source browser). |
+
+## Historical Meeting Data Import
+
+See `docs/HISTORICAL_IMPORT.md` for the full pipeline, meeting-association rules, and security model.
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/historical-imports` | POST | Multipart file upload (a whole folder — each file's multipart filename carries its `webkitRelativePath`). Returns `{id, status: "queued", ...}` immediately; processing runs in the background. |
+| `/api/historical-imports/{job_id}` | GET | Poll job progress: `total_files`, `processed_files`, `successful_files`, `skipped_files`, `failed_files`, `current_file`, `status`. |
+| `/api/historical-imports/{job_id}/results` | GET | Per-file outcome (`success`/`skipped`/`failed`/`duplicate`, `reason`, `recommended_action`) once processed. |
+| `/api/historical-imports` | GET | Import history for the caller's tenant, newest first. |
 
 ## Chat / conversations
 

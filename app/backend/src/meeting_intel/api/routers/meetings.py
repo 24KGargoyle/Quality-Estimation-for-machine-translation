@@ -2,10 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from meeting_intel.api.schemas import MeetingDetail, MeetingLoadRequest, MeetingSummary
+from meeting_intel.api.schemas import HistoricalDocumentSchema, MeetingDetail, MeetingLoadRequest, MeetingSummary
 from meeting_intel.auth.deps import RequestContext, get_current_context
 from meeting_intel.auth.entra import GraphNotConfiguredError
-from meeting_intel.db.models import Meeting, MeetingParticipant
+from meeting_intel.db.models import HistoricalDocument, Meeting, MeetingParticipant
 from meeting_intel.db.session import get_db
 from meeting_intel.ingestion.pipeline import load_meeting_from_graph, load_meeting_manual
 from meeting_intel.security.authz import audit, get_authorized_meeting
@@ -17,6 +17,13 @@ async def _to_detail(db: AsyncSession, meeting: Meeting) -> MeetingDetail:
     participants = (
         await db.execute(select(MeetingParticipant).where(MeetingParticipant.meeting_id == meeting.id))
     ).scalars().all()
+    documents = (
+        await db.execute(
+            select(HistoricalDocument)
+            .where(HistoricalDocument.meeting_id == meeting.id)
+            .order_by(HistoricalDocument.created_at)
+        )
+    ).scalars().all()
     return MeetingDetail(
         id=meeting.id,
         ms_meeting_id=meeting.ms_meeting_id,
@@ -27,7 +34,10 @@ async def _to_detail(db: AsyncSession, meeting: Meeting) -> MeetingDetail:
         transcript_available=meeting.transcript_available,
         recording_available=meeting.recording_available,
         status=meeting.status.value,
+        is_historical=meeting.is_historical,
+        document_count=len(documents),
         participants=[{"display_name": p.display_name, "role": p.role.value} for p in participants],
+        documents=[HistoricalDocumentSchema.model_validate(d) for d in documents],
     )
 
 
@@ -79,6 +89,9 @@ async def list_meetings(
         count = (
             await db.execute(select(MeetingParticipant).where(MeetingParticipant.meeting_id == m.id))
         ).scalars().all()
+        doc_count = (
+            await db.execute(select(HistoricalDocument.id).where(HistoricalDocument.meeting_id == m.id))
+        ).scalars().all()
         results.append(
             MeetingSummary(
                 id=m.id,
@@ -90,6 +103,8 @@ async def list_meetings(
                 transcript_available=m.transcript_available,
                 recording_available=m.recording_available,
                 status=m.status.value,
+                is_historical=m.is_historical,
+                document_count=len(doc_count),
             )
         )
     return results
@@ -126,6 +141,13 @@ async def search_meeting(
             "end_seconds": r.chunk.end_seconds,
             "text": r.chunk.text,
             "score": r.score,
+            "source_file": r.chunk.source_file,
+            "file_type": r.chunk.file_type,
+            "document_type": r.chunk.document_type,
+            "page_number": r.chunk.page_number,
+            "sheet_name": r.chunk.sheet_name,
+            "slide_number": r.chunk.slide_number,
+            "section": r.chunk.section,
         }
         for r in results
     ]
@@ -152,6 +174,13 @@ async def get_meeting_sources(
             "start_seconds": c.start_seconds,
             "end_seconds": c.end_seconds,
             "text": c.text,
+            "source_file": c.source_file,
+            "file_type": c.file_type,
+            "document_type": c.document_type,
+            "page_number": c.page_number,
+            "sheet_name": c.sheet_name,
+            "slide_number": c.slide_number,
+            "section": c.section,
         }
         for c in chunks
     ]

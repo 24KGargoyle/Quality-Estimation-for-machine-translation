@@ -83,7 +83,14 @@ function MeetingWorkspace() {
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-6 px-4 py-6">
       <div className="rounded-xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
-        <h1 className="text-lg font-semibold">{meeting.title}</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-lg font-semibold">{meeting.title}</h1>
+          {meeting.is_historical && (
+            <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
+              Historical
+            </span>
+          )}
+        </div>
         <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-4">
           <div>
             <div className="text-xs text-neutral-400">Meeting ID</div>
@@ -112,6 +119,21 @@ function MeetingWorkspace() {
             </span>
           ))}
         </div>
+
+        {meeting.documents.length > 0 && (
+          <div className="mt-4 border-t border-neutral-100 pt-3 dark:border-neutral-800">
+            <div className="text-xs text-neutral-400">Documents: {meeting.document_count}</div>
+            <ul className="mt-1.5 space-y-1 text-sm text-neutral-600 dark:text-neutral-300">
+              {meeting.documents.map((d) => (
+                <li key={d.id} className="flex items-center gap-2">
+                  <span className="text-neutral-400">├──</span>
+                  <span>{d.relative_path}</span>
+                  <span className="text-xs text-neutral-400">({d.document_type})</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
 
       <div className="flex min-h-[400px] flex-col rounded-xl border border-neutral-200 bg-neutral-50/60 dark:border-neutral-800 dark:bg-neutral-900/40">

@@ -18,6 +18,13 @@ Field names on `IndexableChunk`/`SearchHit` mirror the index schema in the
 refinement prompt: id, tenant_id, meeting_id, meeting_join_id, meeting_title,
 meeting_date, speaker_id, speaker_name, start_time, end_time, content,
 content_type, chunk_index, source, document_id, embedding.
+
+Historical-import upgrade: also carries `source_file`, `relative_path`,
+`file_type`, `document_type`, `page_number`, `sheet_name`, `slide_number`,
+`section` — the same fields transcript chunks and every non-transcript
+document chunk (Word/Excel/PDF/PowerPoint/CSV/text) are indexed with, so
+citations can point back to a page/sheet/slide/section as accurately as
+they point back to a speaker/timestamp. See docs/HISTORICAL_IMPORT.md.
 """
 from __future__ import annotations
 
@@ -43,6 +50,15 @@ class IndexableChunk:
     content_type: str = "transcript_chunk"
     source: str = "graph"
     embedding: list[float] | None = None
+    # Historical-import fields — None/"" for a live Teams transcript chunk.
+    source_file: str | None = None
+    relative_path: str | None = None
+    file_type: str = "vtt"
+    document_type: str = "transcript"
+    page_number: int | None = None
+    sheet_name: str | None = None
+    slide_number: int | None = None
+    section: str | None = None
 
 
 @dataclass
@@ -57,6 +73,14 @@ class SearchHit:
     speaker_name: str | None = None
     vector_rank: int | None = None
     keyword_rank: int | None = None
+    source_file: str | None = None
+    relative_path: str | None = None
+    file_type: str = "vtt"
+    document_type: str = "transcript"
+    page_number: int | None = None
+    sheet_name: str | None = None
+    slide_number: int | None = None
+    section: str | None = None
 
     # Backward-compatible aliases matching the pre-refactor `TranscriptChunk`
     # ORM attribute names, so `agents/answer_agent.py`, `agents/discussion_agent.py`

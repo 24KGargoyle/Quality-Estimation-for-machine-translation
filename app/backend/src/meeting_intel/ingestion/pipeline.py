@@ -43,7 +43,7 @@ from meeting_intel.retrieval.search_provider import IndexableChunk
 logger = logging.getLogger("meeting_intel.ingestion")
 
 
-async def _get_or_create_meeting(
+async def get_or_create_meeting(
     db: AsyncSession, *, tenant_id: str, ms_meeting_id: str, title: str, organizer_id: str | None
 ) -> Meeting:
     meeting = (
@@ -137,7 +137,7 @@ async def load_meeting_from_graph(db: AsyncSession, *, user: User, join_meeting_
         organizer_user_id=user.ms_object_id, join_meeting_id=join_meeting_id
     )
 
-    meeting = await _get_or_create_meeting(
+    meeting = await get_or_create_meeting(
         db,
         tenant_id=user.tenant_id,
         ms_meeting_id=join_meeting_id,
@@ -190,7 +190,7 @@ async def load_meeting_manual(
     raw_vtt: str,
 ) -> Meeting:
     """Manual-upload ingestion path (see module docstring)."""
-    meeting = await _get_or_create_meeting(
+    meeting = await get_or_create_meeting(
         db, tenant_id=user.tenant_id, ms_meeting_id=meeting_id, title=title, organizer_id=user.id
     )
     existing_participant = (

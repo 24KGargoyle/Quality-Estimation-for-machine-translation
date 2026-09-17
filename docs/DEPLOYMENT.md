@@ -85,6 +85,16 @@ Without credentials for whichever provider is selected, chat/discussion/decision
 degrade gracefully (explicit "AI model is not configured" message) rather than crashing or
 fabricating answers.
 
+## Historical Meeting Data Import
+
+No setup required for local dev — raw files land under `./data/historical_blobs` by default
+(`FILE_STORAGE=local`). For production, set `FILE_STORAGE=azure_blob` and
+`AZURE_STORAGE_CONTAINER_SAS_URL` — see `docs/AZURE_SETUP.md` and `docs/HISTORICAL_IMPORT.md`.
+Import jobs run as background `asyncio` tasks inside the backend process (no separate worker); an
+in-flight job is lost if the process restarts mid-batch — acceptable for this environment's scale,
+but replace with a real task queue before relying on this for very large/critical batch imports in
+production.
+
 ## Configuring search (RAG)
 
 - **In-memory (default, `SEARCH_PROVIDER=memory`)**: no setup, real working hybrid search for

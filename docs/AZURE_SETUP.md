@@ -98,7 +98,29 @@ documented, and raise a clear `LLMNotConfiguredError`/equivalent when required s
 missing. **No live Azure OpenAI call has been made from this codebase** — no API key is available
 in this environment.
 
-## 4. Microsoft Entra ID / Graph (unchanged by this refactor)
+## 4. Azure Blob Storage (historical import raw file storage)
+
+Optional — only needed if you want the raw files uploaded via Historical Meeting Data Import
+(`docs/HISTORICAL_IMPORT.md`) persisted somewhere other than local disk. Metadata (hash, type,
+tenant, meeting) always lives in Azure SQL/SQLite regardless; this only affects where the file
+*bytes* go.
+
+1. Create a Storage Account and a Blob container.
+2. Generate a container-scoped SAS URL with **write** (and read, if you want to fetch files back)
+   permission.
+3. Set:
+   ```
+   FILE_STORAGE=azure_blob
+   AZURE_STORAGE_CONTAINER_SAS_URL=https://<account>.blob.core.windows.net/<container>?sv=...&sig=...
+   ```
+
+**Verified in this environment**: `storage/blob_storage.AzureBlobStorage` is a real `httpx` PUT
+request against the Blob Storage REST API (`x-ms-blob-type: BlockBlob`), authenticated via the SAS
+query string already embedded in the configured URL — no `azure-storage-blob` SDK dependency,
+consistent with the REST-over-SDK choice made for Azure AI Search. **No live Azure Blob Storage
+upload has been made from this codebase** — no Azure subscription is available here.
+
+## 5. Microsoft Entra ID / Graph (unchanged by this refactor)
 
 See `docs/MICROSOFT_GRAPH_PERMISSIONS.md` for the app registration and permissions required for
 Teams meeting/transcript/chat integration — this was not affected by the PostgreSQL removal.
@@ -110,5 +132,6 @@ minimum for a full production deployment: `AZURE_SQL_CONNECTION_STRING`,
 `AZURE_SEARCH_ENDPOINT`/`AZURE_SEARCH_API_KEY`/`AZURE_SEARCH_INDEX`, `AZURE_OPENAI_ENDPOINT`/
 `AZURE_OPENAI_API_KEY`/`AZURE_OPENAI_CHAT_DEPLOYMENT`/`AZURE_OPENAI_EMBEDDING_DEPLOYMENT`/
 `AZURE_OPENAI_EMBEDDING_DIMENSIONS`, `MS_TENANT_ID`/`MS_CLIENT_ID`/`MS_CLIENT_SECRET`/
-`MS_REDIRECT_URI`, `SECRET_KEY`. None of these are committed anywhere in this repository — never
-commit real secrets.
+`MS_REDIRECT_URI`, `SECRET_KEY`, and (if using Azure Blob Storage for historical import files)
+`FILE_STORAGE=azure_blob`/`AZURE_STORAGE_CONTAINER_SAS_URL`. None of these are committed anywhere
+in this repository — never commit real secrets.

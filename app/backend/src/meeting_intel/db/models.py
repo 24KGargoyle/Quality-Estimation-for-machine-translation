@@ -100,6 +100,12 @@ class Meeting(Base, UUIDPk, TimestampMixin):
     transcript_available: Mapped[bool] = mapped_column(Boolean, default=False)
     recording_available: Mapped[bool] = mapped_column(Boolean, default=False)
     status: Mapped[MeetingStatus] = mapped_column(Enum(MeetingStatus), default=MeetingStatus.pending, index=True)
+    # True for a meeting created by the historical import pipeline (either a
+    # deterministic historical_<hash> id, or a real ms_meeting_id an imported
+    # file was associated with) — lets the UI group "Live" vs "Historical"
+    # meetings without guessing from ms_meeting_id's shape. See
+    # ingestion/historical_import.py and docs/HISTORICAL_IMPORT.md.
+    is_historical: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
 
     participants: Mapped[list["MeetingParticipant"]] = relationship(back_populates="meeting", cascade="all, delete-orphan")
 
@@ -246,6 +252,16 @@ class AISource(Base, UUIDPk):
     end_seconds: Mapped[float] = mapped_column(Float)
     excerpt: Mapped[str] = mapped_column(Text)
     score: Mapped[float] = mapped_column(Float)
+    # Historical-document citation metadata — null for a transcript-sourced
+    # citation. Never fabricated: populated only from the SearchHit actually
+    # retrieved. See docs/HISTORICAL_IMPORT.md.
+    source_file: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    file_type: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    document_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    page_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    sheet_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    slide_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    section: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
 
 # --------------------------------------------------------------------------
@@ -405,3 +421,87 @@ class RevokedToken(Base):
     jti: Mapped[str] = mapped_column(String(64), primary_key=True)
     revoked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+# --------------------------------------------------------------------------
+# Historical Meeting Data Import
+# --------------------------------------------------------------------------
+
+
+class ImportJobStatus(str, enum.Enum):
+    queued = "queued"
+    processing = "processing"
+    completed = "completed"
+    completed_with_warnings = "completed_with_warnings"
+    failed = "failed"
+
+
+class ImportFileStatus(str, enum.Enum):
+    success = "success"
+    skipped = "skipped"
+    failed = "failed"
+    duplicate = "duplicate"
+
+
+class HistoricalImportJob(Base, UUIDPk, TimestampMixin):
+    """One batch folder/multi-file upload. Tracked so a large import can be
+    processed in the background instead of inside a single blocking HTTP
+    request — see ingestion/historical_import.py and
+    api/routers/historical_imports.py."""
+
+    __tablename__ = "historical_import_jobs"
+
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    status: Mapped[ImportJobStatus] = mapped_column(Enum(ImportJobStatus), default=ImportJobStatus.queued, index=True)
+    total_files: Mapped[int] = mapped_column(Integer, default=0)
+    processed_files: Mapped[int] = mapped_column(Integer, default=0)
+    successful_files: Mapped[int] = mapped_column(Integer, default=0)
+    skipped_files: Mapped[int] = mapped_column(Integer, default=0)
+    failed_files: Mapped[int] = mapped_column(Integer, default=0)
+    current_file: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class ImportedFileResult(Base, UUIDPk, TimestampMixin):
+    """Per-file outcome within one HistoricalImportJob — powers the import
+    report (§20) and history detail view (§21). One corrupt/unsupported file
+    never stops the rest of the batch (§37): each file gets its own row and
+    its own independent success/skipped/failed/duplicate outcome."""
+
+    __tablename__ = "imported_file_results"
+    __table_args__ = (Index("ix_imported_file_results_job", "import_job_id"),)
+
+    import_job_id: Mapped[str] = mapped_column(ForeignKey("historical_import_jobs.id", ondelete="CASCADE"))
+    filename: Mapped[str] = mapped_column(String(500))
+    relative_path: Mapped[str] = mapped_column(String(1024))
+    file_type: Mapped[str] = mapped_column(String(16))
+    status: Mapped[ImportFileStatus] = mapped_column(Enum(ImportFileStatus))
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    recommended_action: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    document_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    meeting_id: Mapped[str | None] = mapped_column(ForeignKey("meetings.id", ondelete="SET NULL"), nullable=True)
+    chunk_count: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class HistoricalDocument(Base, UUIDPk, TimestampMixin):
+    """Metadata for one imported source file (not its chunks — those live in
+    the SearchProvider, see retrieval/search_provider.py). The
+    `(tenant_id, file_hash)` uniqueness is the duplicate-detection identity
+    (§17): re-uploading the exact same file within a tenant is recognized
+    and skipped rather than re-indexed."""
+
+    __tablename__ = "historical_documents"
+    __table_args__ = (UniqueConstraint("tenant_id", "file_hash", name="uq_historical_documents_tenant_hash"),)
+
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    meeting_id: Mapped[str | None] = mapped_column(ForeignKey("meetings.id", ondelete="SET NULL"), nullable=True, index=True)
+    import_job_id: Mapped[str | None] = mapped_column(ForeignKey("historical_import_jobs.id", ondelete="SET NULL"), nullable=True)
+    source_file: Mapped[str] = mapped_column(String(500))
+    relative_path: Mapped[str] = mapped_column(String(1024))
+    file_type: Mapped[str] = mapped_column(String(16))
+    document_type: Mapped[str] = mapped_column(String(32))
+    file_hash: Mapped[str] = mapped_column(String(64), index=True)
+    blob_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    size_bytes: Mapped[int] = mapped_column(Integer, default=0)
+    chunk_count: Mapped[int] = mapped_column(Integer, default=0)

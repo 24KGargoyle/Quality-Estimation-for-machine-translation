@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth";
 const LINKS = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/meetings", label: "Meetings" },
+  { href: "/meetings/import", label: "Historical Import" },
   { href: "/groups", label: "Groups" },
   { href: "/search", label: "Search" },
   { href: "/feedback", label: "Feedback" },

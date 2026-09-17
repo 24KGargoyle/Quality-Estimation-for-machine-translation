@@ -53,7 +53,8 @@ async def _clean_tables():
         tables = [
             "revoked_tokens", "oauth_states", "audit_log", "action_items", "decisions", "discussions",
             "feedback", "ai_sources", "ai_responses", "messages", "conversation_members", "conversations",
-            "group_members", "groups", "meeting_transcripts", "meeting_participants", "meetings",
+            "group_members", "groups", "imported_file_results", "historical_documents",
+            "historical_import_jobs", "meeting_transcripts", "meeting_participants", "meetings",
             "teams_mappings", "users", "tenants",
         ]
         for table in tables:

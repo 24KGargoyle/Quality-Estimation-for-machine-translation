@@ -105,6 +105,16 @@ class AzureAISearchProvider(SearchProvider):
                 {"name": "chunk_index", "type": "Edm.Int32", "filterable": True, "sortable": True},
                 {"name": "source", "type": "Edm.String", "filterable": True},
                 {"name": "document_id", "type": "Edm.String", "filterable": True},
+                # Historical-import fields — see docs/HISTORICAL_IMPORT.md. Populated for every
+                # non-transcript document chunk; left at their defaults for live transcript chunks.
+                {"name": "source_file", "type": "Edm.String", "searchable": True, "filterable": True},
+                {"name": "relative_path", "type": "Edm.String", "filterable": True},
+                {"name": "file_type", "type": "Edm.String", "filterable": True, "facetable": True},
+                {"name": "document_type", "type": "Edm.String", "filterable": True, "facetable": True},
+                {"name": "page_number", "type": "Edm.Int32", "filterable": True, "sortable": True},
+                {"name": "sheet_name", "type": "Edm.String", "filterable": True},
+                {"name": "slide_number", "type": "Edm.Int32", "filterable": True, "sortable": True},
+                {"name": "section", "type": "Edm.String", "searchable": True, "filterable": True},
                 {"name": "embedding", "type": "Collection(Edm.Single)", "searchable": True,
                  "dimensions": dimensions, "vectorSearchProfile": "default-profile"},
             ],
@@ -148,6 +158,14 @@ class AzureAISearchProvider(SearchProvider):
                 "chunk_index": c.chunk_index,
                 "source": c.source,
                 "document_id": c.document_id,
+                "source_file": c.source_file or "",
+                "relative_path": c.relative_path or "",
+                "file_type": c.file_type,
+                "document_type": c.document_type,
+                "sheet_name": c.sheet_name or "",
+                "section": c.section or "",
+                **({"page_number": c.page_number} if c.page_number is not None else {}),
+                **({"slide_number": c.slide_number} if c.slide_number is not None else {}),
                 **({"embedding": c.embedding} if c.embedding else {}),
             }
             for c in chunks
@@ -182,6 +200,10 @@ class AzureAISearchProvider(SearchProvider):
             chunk_index=row.get("chunk_index", 0), start_time=row.get("start_time", 0.0),
             end_time=row.get("end_time", 0.0), speaker_name=row.get("speaker_name") or None,
             score=row.get("@search.rerankerScore", row.get("@search.score", 0.0)) or 0.0,
+            source_file=row.get("source_file") or None, relative_path=row.get("relative_path") or None,
+            file_type=row.get("file_type") or "vtt", document_type=row.get("document_type") or "transcript",
+            page_number=row.get("page_number"), sheet_name=row.get("sheet_name") or None,
+            slide_number=row.get("slide_number"), section=row.get("section") or None,
         )
 
     async def chunks_for_meeting(self, *, tenant_id: str, meeting_id: str) -> list[SearchHit]:

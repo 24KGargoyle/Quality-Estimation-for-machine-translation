@@ -45,7 +45,11 @@ app/
     src/meeting_intel/
       auth/          Entra ID (MSAL) + dev auth providers, session deps
       graph/          Microsoft Graph client (meetings, transcripts, chat messages)
-      ingestion/      VTT transcript parsing, chunking, indexing pipeline
+      ingestion/      VTT transcript parsing, chunking, indexing pipeline; parsers/ (Word/Excel/
+                      PDF/PowerPoint/CSV/text parsers + ParserFactory), historical_import.py
+                      (batch import job pipeline), meeting_association.py — see
+                      docs/HISTORICAL_IMPORT.md
+      storage/        BlobStorage abstraction for historical-import raw files (local disk / Azure Blob)
       providers.py    LLMProvider/EmbeddingProvider abstractions (Anthropic/local + Azure OpenAI)
       llm/            Anthropic client wrapper (the default LLMProvider implementation)
       embeddings/     Local sentence-transformers embedder (the default EmbeddingProvider)
@@ -105,6 +109,14 @@ Python venv, `npm run dev`/`npm run start`).
    (speaker/timestamp) — never trusted as free text.
 6. The answer, `AIResponse`, and `AISource` rows are persisted; the response returns the answer,
    sources, and whether the evidence was sufficient.
+
+## Historical Meeting Data Import
+
+A second ingestion entry point alongside live Graph/manual transcript loading: a folder of mixed
+Teams transcripts and supporting documents (Word, Excel, PDF, PowerPoint, text, CSV) is parsed,
+chunked, embedded, and indexed through the *same* `SearchProvider`/RAG pipeline live transcripts
+use — there is no separate historical RAG implementation. See `docs/HISTORICAL_IMPORT.md` for the
+full pipeline, meeting-association rules, duplicate detection, and security model.
 
 ## Known architectural limitations
 

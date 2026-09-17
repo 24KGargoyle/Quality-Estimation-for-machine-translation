@@ -14,6 +14,7 @@ from meeting_intel.db.models import (
     Conversation,
     Group,
     GroupMember,
+    HistoricalImportJob,
     Meeting,
     MeetingParticipant,
     User,
@@ -105,6 +106,19 @@ async def get_authorized_group(db: AsyncSession, *, user: User, group_id: str) -
     if is_member is None and user.role != UserRole.admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not a member of this group")
     return group
+
+
+async def get_authorized_import_job(db: AsyncSession, *, user: User, job_id: str) -> HistoricalImportJob:
+    job = (
+        await db.execute(
+            select(HistoricalImportJob).where(
+                HistoricalImportJob.id == job_id, HistoricalImportJob.tenant_id == user.tenant_id
+            )
+        )
+    ).scalar_one_or_none()
+    if job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Import job not found")
+    return job
 
 
 async def get_authorized_conversation(db: AsyncSession, *, user: User, conversation_id: str) -> Conversation:

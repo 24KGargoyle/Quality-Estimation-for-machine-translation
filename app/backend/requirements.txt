@@ -17,5 +17,10 @@ tenacity==9.0.0
 python-multipart==0.0.9
 websockets==13.1
 structlog==24.4.0
+python-docx==1.1.2
+openpyxl==3.1.5
+pypdf==5.0.1
+python-pptx==1.0.2
 pytest==8.3.3
 pytest-asyncio==0.24.0
+fpdf2==2.7.9

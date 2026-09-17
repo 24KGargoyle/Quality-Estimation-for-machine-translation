@@ -1,10 +1,12 @@
 # RAG Architecture
 
-This is the platform's `docs/RAG.md` — retrieval-augmented generation over meeting transcripts.
-**No PostgreSQL, no pgvector, anywhere in this pipeline** — see
-`docs/MIGRATION_FROM_POSTGRES.md` for what changed.
+This is the platform's `docs/RAG.md` — retrieval-augmented generation over meeting transcripts
+**and** historical supporting documents (Word/Excel/PDF/PowerPoint/CSV/text — see
+`docs/HISTORICAL_IMPORT.md`). Both sources converge on the same pipeline below; there is no
+separate historical RAG implementation. **No PostgreSQL, no pgvector, anywhere in this
+pipeline** — see `docs/MIGRATION_FROM_POSTGRES.md` for what changed.
 
-## Ingestion
+## Ingestion — live Teams transcripts
 
 ```
 Meeting ID
@@ -38,6 +40,28 @@ get_search_provider().index_chunks(...)    — InMemorySearchProvider (dev/test)
 No metadata is ever dropped between steps — the chunker's output carries speaker + both
 timestamps through to the `IndexableChunk`, which the search provider indexes alongside the
 embedding.
+
+## Ingestion — historical documents
+
+```
+Folder upload (Word/Excel/PDF/PowerPoint/CSV/text/.vtt, mixed)
+   ▼
+ingestion/parsers/ (ParserFactory)   — one parser per format, all returning the same
+                                        NormalizedDocument shape (see docs/HISTORICAL_IMPORT.md)
+   ▼
+providers.get_embedding_provider().embed_texts(...)   — the exact same embedding call
+                                                          live-transcript ingestion uses
+   ▼
+IndexableChunk  (source_file/relative_path/file_type/document_type/page_number/sheet_name/
+                 slide_number/section carried through — the transcript-only fields
+                 speaker_name/start_time/end_time are simply unset for a document chunk)
+   ▼
+get_search_provider().index_chunks(...)
+```
+
+The only difference from the live-transcript path is which parser produces the
+`NormalizedDocument`/`IndexableChunk` — everything downstream (embedding call, search provider,
+retrieval, grounding, citations) is identical code.
 
 ## Storage: the `SearchProvider` abstraction
 
@@ -81,7 +105,20 @@ Two implementations:
 | `chunk_index` | `Edm.Int32` | filterable, sortable |
 | `source` | `Edm.String` | filterable |
 | `document_id` | `Edm.String` | filterable |
+| `source_file` | `Edm.String` | searchable, filterable |
+| `relative_path` | `Edm.String` | filterable |
+| `file_type` | `Edm.String` | filterable, facetable |
+| `document_type` | `Edm.String` | filterable, facetable |
+| `page_number` | `Edm.Int32` | filterable, sortable |
+| `sheet_name` | `Edm.String` | filterable |
+| `slide_number` | `Edm.Int32` | filterable, sortable |
+| `section` | `Edm.String` | searchable, filterable |
 | `embedding` | `Collection(Edm.Single)` | searchable, vector profile `default-profile`, HNSW/cosine |
+
+The `source_file`→`section` fields are populated for historical document chunks (see
+`docs/HISTORICAL_IMPORT.md`) and left at their defaults (empty string/unset) for live transcript
+chunks — `document_type` doubles as the discriminator (`"transcript"` vs. `"supporting_document"`/
+`"spreadsheet"`/`"presentation"`/`"reference_document"`).
 
 Vector `dimensions` are read from `settings.azure_openai_embedding_dimensions` (when
 `EMBEDDING_PROVIDER=azure_openai`) or `settings.embedding_dim` (local model) — **never
@@ -142,9 +179,14 @@ message whenever retrieval returns nothing.
 The Answer Agent never lets the model choose citation content — it can only reference the
 excerpts it was actually given, tagged `[S1]`, `[S2]`, etc. `answer_agent._parse_citations()`
 maps those markers back to the *exact* `SearchHit` objects that were retrieved, so a citation's
-speaker/timestamp/excerpt shown to the user is always sourced from the search index, not from
+speaker/timestamp/excerpt (or file/page/sheet/slide/section, for a historical document — see
+`agents/prompts.source_label`) shown to the user is always sourced from the search index, not from
 anything the model generated. If the model cites nothing but excerpts were used, the top excerpt
-is shown anyway so the user can still see what evidence existed.
+is shown anyway so the user can still see what evidence existed. A single answer can cite both a
+transcript excerpt and a document excerpt together — retrieval isn't scoped to one
+`document_type`, so cross-document reasoning ("what did the team agree on and what's the
+action-item status?" pulling from both the transcript and `Action_Items.xlsx`) falls out of the
+existing hybrid search call with no special-case code.
 
 ## Search endpoint (no LLM)
 

@@ -4,7 +4,7 @@
 
 `app/backend/tests/`, run with `pytest` against a real, isolated, temporary SQLite database (via
 the async `aiosqlite` driver) — no PostgreSQL, no external database server, no setup required.
-**58 tests, all passing** as of this writing (`python -m pytest -q`, ~10-16s local wall time,
+**107 tests, all passing** as of this writing (`python -m pytest -q`, ~13-15s local wall time,
 including one end-to-end test that loads a real sentence-transformers model).
 
 ### Unit (`tests/unit/`, no database)
@@ -25,11 +25,19 @@ including one end-to-end test that loads a real sentence-transformers model).
   meeting isolation** (a query scoped to one tenant/meeting never returns another's chunks).
 - **`test_azure_search.py`** — the `AzureAISearchProvider`, entirely against mocked HTTP (no live
   Azure resource): the provider raises `SearchNotConfiguredError` *before any HTTP call* when
-  unconfigured; the index schema it would create (all 16 fields, vector dimensions sourced from
-  the active embedding provider's config, vector search + semantic search sections); document
-  upload sends `mergeOrUpload` actions; every query includes a mandatory `tenant_id`+`meeting_id`
-  OData filter; OData special characters (`'`) are escaped to prevent filter injection; a
-  transport failure surfaces as `SearchNotConfiguredError`, never a fabricated result.
+  unconfigured; the index schema it would create (all 24 fields — the original 16 plus the
+  historical-import citation fields, vector dimensions sourced from the active embedding
+  provider's config, vector search + semantic search sections); document upload sends
+  `mergeOrUpload` actions; every query includes a mandatory `tenant_id`+`meeting_id` OData filter;
+  OData special characters (`'`) are escaped to prevent filter injection; a transport failure
+  surfaces as `SearchNotConfiguredError`, never a fabricated result.
+- **`test_parsers.py`** — every historical-import `DocumentParser` (VTT, text, Word, Excel, PDF,
+  PowerPoint, CSV): a valid file, an empty file, a corrupted file, and — for legacy `.doc`/`.xls`
+  and scanned/image PDFs — the "reported unsupported, never crashed or silently accepted" contract.
+- **`test_file_safety.py`** — path traversal, absolute paths, null bytes, and filename
+  sanitization for the historical import upload endpoint.
+- **`test_meeting_association.py`** — the deterministic `historical_<hash>` id generator (the same
+  folder produces the same id on a repeat import) and folder-based grouping.
 
 ### Integration (`tests/integration/`, real DB via httpx `ASGITransport`)
 
@@ -47,6 +55,13 @@ including one end-to-end test that loads a real sentence-transformers model).
   (checked via a `RevokedToken` table + the JWT's `jti` claim), and does not affect other users'
   tokens; (3) sharing a group-sourced AI message now requires membership in the *source* group,
   not only the destination group (previously any tenant user could re-share it).
+- **`test_historical_import.py`** — the full Historical Meeting Data Import pipeline end to end
+  via the real HTTP API: a mixed VTT+Word folder upload indexes into one meeting; an unsupported
+  file and a corrupted file don't abort the rest of the batch; duplicate detection within one
+  batch and across repeated imports of the same folder; cross-document retrieval (a search
+  returns both a transcript chunk and a `.docx` chunk); tenant isolation between two tenants'
+  imports and import history; and security cases (unauthenticated upload rejected, path traversal
+  in a relative path rejected, an oversized file rejected, an empty upload rejected).
 
 ### End-to-end (`tests/e2e/test_full_flow.py`)
 
@@ -99,3 +114,9 @@ lack of a configured `ANTHROPIC_API_KEY`/Azure OpenAI credentials in this enviro
   service. Azure SQL is only exercised indirectly: the SQLAlchemy/Alembic layer is dialect-generic
   and was verified against SQLite; the `AZURE_SQL_CONNECTION_STRING` path itself has not been
   run. See `docs/AZURE_SETUP.md` and the final implementation report.
+- **A live Azure Blob Storage upload, real `.doc`/`.xls` conversion, and OCR for scanned PDFs** —
+  none are available/implemented in this environment; see `docs/HISTORICAL_IMPORT.md`
+  "Remaining limitations".
+- A frontend automated test for the folder-upload UI (`/meetings/import`) — verified by a
+  production build + lint pass and by exercising the underlying API end to end
+  (`test_historical_import.py`), not by a browser-driven UI test.
