@@ -13,6 +13,7 @@ this environment to safely exercise and verify.
 from __future__ import annotations
 
 import io
+import re
 import zipfile
 
 from docx import Document
@@ -23,6 +24,15 @@ from meeting_intel.ingestion.parsers.base import DocumentParser
 from meeting_intel.ingestion.parsers.textutil import split_text
 
 _HEADING_STYLES = {f"Heading {n}" for n in range(1, 10)} | {"Title"}
+
+
+def is_word_transcript(filename: str, text: str) -> bool:
+    """Recognize explicit transcript labels or repeated timestamped turns."""
+    if re.search(r"\btranscripts?\b", filename.replace("_", " "), re.I):
+        return True
+    if re.search(r"^\s*(?:(?:meeting|video|audio|teams)\s+)?transcript\s*$", text, re.I | re.M):
+        return True
+    return len(re.findall(r"^\s*(?:[\w .'-]{1,80}\s+)?\[?\d{1,2}:\d{2}(?::\d{2})?\]?\s*$", text, re.M)) >= 2
 
 
 def _table_to_text(table) -> str:
@@ -55,6 +65,9 @@ class WordParser(DocumentParser):
         except (PackageNotFoundError, KeyError, ValueError, zipfile.BadZipFile) as exc:
             raise UnsupportedFileError(f"Could not open as a .docx file: {exc}") from exc
 
+        document_type = "transcript" if is_word_transcript(
+            filename, "\n".join(p.text for p in doc.paragraphs)
+        ) else self.document_type
         documents: list[NormalizedDocument] = []
         section = "Document"
         buffer_parts: list[str] = []
@@ -73,7 +86,7 @@ class WordParser(DocumentParser):
                         source_file=filename,
                         relative_path=relative_path,
                         file_type="docx",
-                        document_type=self.document_type,
+                        document_type=document_type,
                         content=piece,
                         section=section,
                     )
@@ -108,7 +121,7 @@ class WordParser(DocumentParser):
                                     source_file=filename,
                                     relative_path=relative_path,
                                     file_type="docx",
-                                    document_type=self.document_type,
+                                    document_type=document_type,
                                     content=piece,
                                     section=section,
                                     metadata={"is_table": True},

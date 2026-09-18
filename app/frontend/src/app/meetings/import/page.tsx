@@ -6,6 +6,13 @@ import { api, ApiError } from "@/lib/api";
 import { ImportedFileResultSchema, ImportJobResults, ImportJobSummary } from "@/lib/types";
 
 const SUPPORTED_EXTENSIONS = ["vtt", "txt", "docx", "doc", "xlsx", "xls", "pdf", "pptx", "csv"];
+const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024;
+
+function skipReason(file: File): string | null {
+  if (!SUPPORTED_EXTENSIONS.includes(extOf(file.name))) return "Unsupported file type";
+  if (file.size > MAX_FILE_SIZE_BYTES) return "Exceeds the 50 MB per-file limit";
+  return null;
+}
 
 function extOf(name: string): string {
   const parts = name.split(".");
@@ -102,13 +109,13 @@ function ImportContent() {
   }
 
   async function handleUpload() {
-    if (files.length === 0) return;
+    if (importableFiles.length === 0) return;
     setBusy(true);
     setError(null);
     setResults(null);
     try {
       const formData = new FormData();
-      for (const f of files) {
+      for (const f of importableFiles) {
         formData.append("files", f, relativePathOf(f));
       }
       const created = await api.upload<ImportJobSummary>("/api/historical-imports", formData);
@@ -138,6 +145,9 @@ function ImportContent() {
   }
 
   const counts = detectCounts(files);
+  const importableFiles = files.filter((file) => !skipReason(file))
+    .sort((a, b) => relativePathOf(a).localeCompare(relativePathOf(b)));
+  const skippedFiles = files.filter((file) => skipReason(file));
   const inProgress = job && (job.status === "queued" || job.status === "processing");
 
   return (
@@ -154,6 +164,7 @@ function ImportContent() {
           ref={folderInputRef}
           type="file"
           multiple
+          disabled={busy || !!inProgress}
           onChange={handleSelectFolder}
           className="block w-full text-sm text-neutral-600 file:mr-4 file:rounded-md file:border-0 file:bg-neutral-900 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-neutral-800 dark:text-neutral-300 dark:file:bg-white dark:file:text-neutral-900"
         />
@@ -168,6 +179,20 @@ function ImportContent() {
                 </span>
               ))}
             </div>
+            <p className="mt-3">Ready to import: {importableFiles.length}. Skipped before upload: {skippedFiles.length}.</p>
+            {skippedFiles.length > 0 && (
+              <details className="mt-2 text-amber-700 dark:text-amber-400">
+                <summary className="cursor-pointer">View skipped files</summary>
+                <ul className="mt-2 max-h-48 overflow-auto space-y-1 break-all">
+                  {skippedFiles.map((file, index) => (
+                    <li key={`${relativePathOf(file)}-${index}`}>
+                      {relativePathOf(file)}: {skipReason(file)}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+            {importableFiles.length === 0 && <p className="mt-2">Select a folder with supported files of 50 MB or less.</p>}
           </div>
         )}
 
@@ -175,7 +200,7 @@ function ImportContent() {
 
         <button
           onClick={handleUpload}
-          disabled={files.length === 0 || busy || !!inProgress}
+          disabled={importableFiles.length === 0 || busy || !!inProgress}
           className="mt-4 rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-50 dark:bg-white dark:text-neutral-900"
         >
           {busy || inProgress ? "Processing…" : "Upload & Process"}

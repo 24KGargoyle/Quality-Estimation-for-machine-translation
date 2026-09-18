@@ -6,7 +6,7 @@ import { MessageSchema, SourceSchema } from "@/lib/types";
 import ShareToGroupModal from "./ShareToGroupModal";
 
 function sourceLabel(s: SourceSchema): string {
-  if (s.document_type === "transcript" || !s.source_file) {
+  if ((s.document_type === "transcript" && s.file_type === "vtt") || !s.source_file) {
     return `Speaker: ${s.speaker || "Unknown"} · Timestamp: ${s.start_timestamp} · Source: Meeting transcript`;
   }
   if (s.page_number != null) return `File: ${s.source_file} · Page: ${s.page_number}`;

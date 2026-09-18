@@ -139,6 +139,7 @@ class SearchProvider(ABC):
         vector: list[float] | None = None,
         speaker: str | None = None,
         top_k: int,
+        document_id: str | None = None,
     ) -> list[SearchHit]:
         """Combined keyword + vector retrieval. `tenant_id` and `meeting_ids`
         are mandatory, enforced filters — never optional, never trusted from

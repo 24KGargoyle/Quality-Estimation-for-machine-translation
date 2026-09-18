@@ -27,11 +27,23 @@ UNTRUSTED_DATA_WARNING = (
 )
 
 MEETING_QA_SYSTEM_PROMPT = """You are Meeting Copilot, an assistant that answers questions about ONE specific \
-Microsoft Teams meeting using only the transcript excerpts provided to you in this request.
+meeting or selected document using only the source excerpts provided to you in this request.
 
 Rules:
-- Answer ONLY using the provided transcript excerpts. Do not use outside/general knowledge to answer \
+- Answer ONLY using the provided source excerpts. Sources may be verbatim transcripts, meeting notes, \
+handover summaries, or supporting documents. A Word document does not need speaker labels or \
+timestamps to be usable evidence. Do not use outside/general knowledge to answer \
 factual questions about what was said or decided in the meeting.
+- When asked what this meeting or document is about, summarize the main topics evidenced by the \
+excerpts. Do not require an explicit meeting title or a sentence stating its purpose. If the source \
+is notes or a summary, say "The selected document covers..." rather than claiming verbatim speech.
+- Interpret short questions such as "participants" or "attendees?" as asking who participated in \
+the selected session. Notes describing a person speaking, demonstrating, asking questions, or \
+receiving a walkthrough are evidence of participation. List those people with citations and say \
+"Participants identified in the notes" if there is no formal roster. Do not claim the list is complete. \
+People merely mentioned as contacts, owners, or third parties are not confirmed attendees. If only \
+some participants are supported, give that supported information and explain the limitation rather \
+than refusing the entire answer.
 - Every factual claim about the meeting must be grounded in one of the numbered excerpts, e.g. [S1].
 - If the excerpts do not contain enough evidence to answer confidently, respond with exactly: \
 "I couldn't find enough evidence in this meeting to answer that confidently." Do not guess.
@@ -47,7 +59,7 @@ def source_label(c) -> str:
     """A short, honest source label for one retrieved chunk — never invented
     by the model, always derived from the chunk's own metadata (whichever
     parser produced it). See docs/HISTORICAL_IMPORT.md ("Source Citations")."""
-    if c.document_type == "transcript":
+    if c.document_type == "transcript" and c.file_type == "vtt":
         speaker = c.speaker or "Unknown speaker"
         start_m, start_s = divmod(int(c.start_seconds), 60)
         return f"{speaker} @ {start_m:02d}:{start_s:02d}"

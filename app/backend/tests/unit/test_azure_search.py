@@ -17,6 +17,23 @@ from meeting_intel.retrieval.search_provider import IndexableChunk, SearchNotCon
 pytestmark = pytest.mark.asyncio
 
 
+async def test_document_filter_is_applied_before_ranking(monkeypatch):
+    provider = _configured_provider(monkeypatch)
+    captured = {}
+
+    async def request(method, path, json_body=None):
+        captured.update(json_body)
+        return {"value": []}
+
+    monkeypatch.setattr(provider, "_request", request)
+    await provider.hybrid_search(
+        tenant_id="tenant", meeting_ids=["meeting"], query="pilot",
+        top_k=5, document_id="hist:abc'123",
+    )
+    assert "tenant_id eq 'tenant'" in captured["filter"]
+    assert "document_id eq 'hist:abc''123'" in captured["filter"]
+
+
 def _configured_provider(monkeypatch):
     # `get_settings()` is process-wide (lru_cache'd), so every attribute we
     # touch is set via `monkeypatch.setattr` on the shared object — pytest

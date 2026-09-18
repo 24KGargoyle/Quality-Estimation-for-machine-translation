@@ -6,13 +6,26 @@ that live Teams meetings use. Live Graph-sourced transcripts and historical file
 same ingestion → chunk → embed → index pipeline (see `docs/RAG_ARCHITECTURE.md`); there is no
 separate "historical" RAG implementation.
 
+## Asking about one imported file
+
+Open its meeting and choose the file in **Answer from**, then ask your question.
+The selected file is validated against your tenant and meeting and filtered before
+search ranking. Selecting a different file starts a fresh chat. Word citations show
+the filename and section instead of inventing speaker names or timestamps.
+
+With local file storage and `SEARCH_PROVIDER=memory`, the first question or search
+after a backend restart rebuilds missing import chunks from the saved source files.
+This can make the first request slower. Keep the local blob storage directory:
+database document records alone cannot recreate the source text. This recovery
+applies to historical imports; Azure AI Search maintains its own index.
+
 ## Supported formats
 
 | Extension | Parser | document_type |
 |---|---|---|
 | `.vtt` | `VTTParser` (wraps the existing `transcript_parser`/`chunker`) | `transcript` |
 | `.txt` | `TextParser` | `supporting_document` |
-| `.docx` | `WordParser` | `supporting_document` |
+| `.docx` | `WordParser` | `transcript` when detected; otherwise `supporting_document` |
 | `.doc` | `WordParser` | reported **unsupported** — see below |
 | `.xlsx` | `ExcelParser` | `spreadsheet` |
 | `.xls` | `ExcelParser` | reported **unsupported** — see below |

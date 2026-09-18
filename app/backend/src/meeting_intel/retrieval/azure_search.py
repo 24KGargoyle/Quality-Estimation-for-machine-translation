@@ -254,6 +254,7 @@ class AzureAISearchProvider(SearchProvider):
         vector: list[float] | None = None,
         speaker: str | None = None,
         top_k: int,
+        document_id: str | None = None,
     ) -> list[SearchHit]:
         if not meeting_ids or not query.strip():
             return []
@@ -264,6 +265,8 @@ class AzureAISearchProvider(SearchProvider):
             "filter": self._scope_filter(tenant_id, meeting_ids, speaker),
             "top": top_k,
         }
+        if document_id is not None:
+            body["filter"] += f" and document_id eq '{_escape_odata(document_id)}'"
         if vector is not None:
             body["vectorQueries"] = [{"kind": "vector", "vector": vector, "fields": "embedding", "k": top_k}]
         data = await self._request("POST", "/docs/search", body)

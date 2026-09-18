@@ -77,10 +77,10 @@ def _parse_citations(text: str, chunks: list[RetrievedChunk]) -> list[SourceCita
 
 
 async def answer_question(
-    db: AsyncSession, *, meeting: Meeting, user: User, history: list[dict], question: str
+    db: AsyncSession, *, meeting: Meeting, user: User, history: list[dict], question: str, document=None
 ) -> AnswerResult:
     chunks, speaker, cross_meeting = await resolve_scope_and_retrieve(
-        db, meeting=meeting, user=user, question=question
+        db, meeting=meeting, user=user, question=question, document=document
     )
 
     if not chunks:
@@ -93,6 +93,12 @@ async def answer_question(
         )
 
     system, messages = build_meeting_qa_messages(history=history, excerpts=chunks, question=question)
+    if document is not None:
+        system += (
+            "\nThe user explicitly selected one document. In this request, 'this meeting', "
+            "'this transcript', and 'this document' refer to that selected document's content. "
+            "All provided excerpts are restricted to that document. Cite those excerpts."
+        )
     try:
         result = await get_llm_provider().complete(system=system, messages=messages)
     except LLMNotConfiguredError:

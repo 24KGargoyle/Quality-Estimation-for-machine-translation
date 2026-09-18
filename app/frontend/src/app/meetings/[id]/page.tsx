@@ -24,6 +24,7 @@ function MeetingWorkspace() {
   );
   const [messages, setMessages] = useState<MessageSchema[]>([]);
   const [input, setInput] = useState("");
+  const [documentId, setDocumentId] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -60,6 +61,7 @@ function MeetingWorkspace() {
     try {
       const res = await api.post<ChatResponse>("/api/chat", {
         meeting_id: meetingId,
+        document_id: documentId || null,
         conversation_id: conversationId,
         message: question,
       });
@@ -151,7 +153,31 @@ function MeetingWorkspace() {
 
         {notice && <p className="px-4 pb-1 text-xs text-blue-600 dark:text-blue-400">{notice}</p>}
         {error && <p className="px-4 pb-1 text-xs text-red-600">{error}</p>}
-        {!meeting.transcript_available && (
+        {meeting.documents.length > 0 && (
+          <div className="px-4 pb-3">
+            <label htmlFor="question-document" className="mb-1 block text-sm">Answer from</label>
+            <select
+              id="question-document"
+              value={documentId}
+              disabled={sending}
+              onChange={(e) => {
+                setDocumentId(e.target.value);
+                setConversationId(null);
+                setMessages([]);
+                setError(null);
+                setNotice(null);
+              }}
+              className="w-full rounded-md border border-neutral-300 bg-white p-2 text-sm dark:border-neutral-700 dark:bg-neutral-950"
+            >
+              <option value="">All documents in this meeting</option>
+              {meeting.documents.map((doc) => (
+                <option key={doc.id} value={doc.id}>{doc.source_file}</option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-neutral-500">Select a transcript to restrict answers and citations to that file.</p>
+          </div>
+        )}
+        {!meeting.transcript_available && meeting.documents.length === 0 && (
           <p className="px-4 pb-2 text-xs text-amber-600 dark:text-amber-400">
             This meeting has no transcript indexed yet, so questions can&apos;t be answered from it.
           </p>

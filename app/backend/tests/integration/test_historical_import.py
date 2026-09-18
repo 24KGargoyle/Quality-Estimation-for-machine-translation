@@ -76,6 +76,22 @@ async def test_mixed_folder_upload_indexes_vtt_and_docx_into_one_meeting(client)
     assert {d["file_type"] for d in detail["documents"]} == {"vtt", "docx"}
 
 
+async def test_word_transcript_marks_meeting_ready(client):
+    token = await dev_login(client, email="word@acme.com", display_name="Word", tenant_name="Acme")
+    headers = {"Authorization": f"Bearer {token}"}
+    create = await client.post("/api/historical-imports", headers=headers, files=[
+        ("files", ("Word/Video Transcript.docx", _sample_docx("Session", "Alice: Launch next week."), "application/octet-stream")),
+    ])
+    assert create.status_code == 200
+    job = await _wait_for_job(client, headers, create.json()["id"])
+    assert job["successful_files"] == 1
+    meeting = (await client.get("/api/meetings", headers=headers)).json()[0]
+    assert meeting["transcript_available"] is True
+    assert meeting["status"] == "ready"
+    detail = (await client.get(f"/api/meetings/{meeting['id']}", headers=headers)).json()
+    assert detail["documents"][0]["document_type"] == "transcript"
+
+
 async def test_one_unsupported_file_does_not_abort_the_batch(client):
     token = await dev_login(client, email="owner2@acme.com", display_name="Owner2", tenant_name="Acme")
     headers = {"Authorization": f"Bearer {token}"}
@@ -163,6 +179,52 @@ async def test_cross_document_retrieval_answers_from_transcript_and_docx(client)
     ).json()
     file_types = {r["file_type"] for r in results}
     assert "docx" in file_types  # the .docx chunk is retrievable alongside the transcript
+
+
+async def test_chat_restores_imports_and_restricts_document_sources(client, monkeypatch):
+    from types import SimpleNamespace
+    from meeting_intel.agents import answer_agent
+    from meeting_intel.llm.client import LLMResult
+    from meeting_intel.retrieval.memory_search import get_memory_provider
+
+    async def complete(**kwargs):
+        prompt = str(kwargs)
+        assert "SELECTED_TRANSCRIPT" in prompt
+        assert "OTHER_DOCUMENT" not in prompt
+        return LLMResult("The selected transcript discusses the pilot. [S1]", 1, "test")
+
+    monkeypatch.setattr(answer_agent, "get_llm_provider", lambda: SimpleNamespace(complete=complete))
+    token = await dev_login(client, email="scoped@acme.com", display_name="Scoped", tenant_name="Acme")
+    headers = {"Authorization": f"Bearer {token}"}
+    created = await client.post("/api/historical-imports", headers=headers, files=[
+        ("files", ("Scope/Transcript.docx", _sample_docx("Transcript", "SELECTED_TRANSCRIPT pilot launch."), "application/octet-stream")),
+        ("files", ("Scope/Notes.docx", _sample_docx("Notes", "OTHER_DOCUMENT pilot budget."), "application/octet-stream")),
+        ("files", ("Elsewhere/Other.docx", _sample_docx("Other", "OTHER_DOCUMENT private plan."), "application/octet-stream")),
+    ])
+    assert (await _wait_for_job(client, headers, created.json()["id"]))["successful_files"] == 3
+    meetings = (await client.get("/api/meetings", headers=headers)).json()
+    meeting = next(m for m in meetings if m["title"] == "Scope")
+    detail = (await client.get(f"/api/meetings/{meeting['id']}", headers=headers)).json()
+    document = next(d for d in detail["documents"] if d["source_file"] == "Transcript.docx")
+    get_memory_provider().reset()  # simulate losing all process-local index data on reload
+    response = await client.post("/api/chat", headers=headers, json={
+        "meeting_id": meeting["id"], "document_id": document["id"],
+        "message": "Across all meetings, what is this transcript about?",
+    })
+    assert response.status_code == 200, response.text
+    assert response.json()["evidence_sufficient"] is True
+    assert response.json()["cross_meeting"] is False
+    assert {s["source_file"] for s in response.json()["sources"]} == {"Transcript.docx"}
+    other = next(m for m in meetings if m["id"] != meeting["id"])
+    denied = await client.post("/api/chat", headers=headers, json={
+        "meeting_id": other["id"], "document_id": document["id"], "message": "pilot",
+    })
+    assert denied.status_code == 404
+    other_token = await dev_login(client, email="outsider@example.com", display_name="Outsider", tenant_name="Other tenant")
+    denied = await client.post("/api/chat", headers={"Authorization": f"Bearer {other_token}"}, json={
+        "meeting_id": meeting["id"], "document_id": document["id"], "message": "pilot",
+    })
+    assert denied.status_code in (403, 404)
 
 
 async def test_tenant_isolation_between_two_historical_imports(client):

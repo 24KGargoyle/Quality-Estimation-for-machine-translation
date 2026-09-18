@@ -111,9 +111,20 @@ class InMemorySearchProvider(SearchProvider):
         vector: list[float] | None = None,
         speaker: str | None = None,
         top_k: int,
+        document_id: str | None = None,
     ) -> list[SearchHit]:
         if not meeting_ids:
             return []
+        if document_id is not None:
+            scoped = InMemorySearchProvider()
+            await scoped.index_chunks([
+                c for c in self._chunks_for_scope(tenant_id, meeting_ids)
+                if c.document_id == document_id
+            ])
+            return await scoped.hybrid_search(
+                tenant_id=tenant_id, meeting_ids=meeting_ids, query=query,
+                vector=vector, speaker=speaker, top_k=top_k,
+            )
         keyword_hits = await self.keyword_search(
             tenant_id=tenant_id, meeting_ids=meeting_ids, query=query, speaker=speaker, top_k=top_k * 3
         )

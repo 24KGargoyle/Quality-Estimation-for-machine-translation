@@ -51,15 +51,20 @@ async def hybrid_search(
     query: str,
     speaker: str | None = None,
     top_k: int | None = None,
+    document_id: str | None = None,
 ) -> list[RetrievedChunk]:
     if not meeting_ids:
         return []
+    if db is not None:
+        from .restore_imports import restore_imports
+        await restore_imports(db, tenant_id=tenant_id, meeting_ids=meeting_ids, document_id=document_id)
     top_k = top_k or settings.retrieval_top_k
     vector = get_embedding_provider().embed_query(query)
 
     provider = get_search_provider()
     hits = await provider.hybrid_search(
-        tenant_id=tenant_id, meeting_ids=meeting_ids, query=query, vector=vector, speaker=speaker, top_k=top_k
+        tenant_id=tenant_id, meeting_ids=meeting_ids, query=query, vector=vector, speaker=speaker, top_k=top_k,
+        **({"document_id": document_id} if document_id else {}),
     )
     return [
         RetrievedChunk(chunk=hit, score=hit.score, vector_rank=hit.vector_rank, keyword_rank=hit.keyword_rank)

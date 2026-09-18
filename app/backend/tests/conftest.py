@@ -61,6 +61,10 @@ async def _clean_tables():
             await conn.execute(text(f"DELETE FROM {table}"))
     await engine.dispose()
     yield
+    # Background imports use the application's engine rather than the client
+    # fixture's engine. Release its SQLite handles before deleting the test DB.
+    from meeting_intel.db.session import engine as application_engine
+    await application_engine.dispose()
 
 
 @pytest_asyncio.fixture

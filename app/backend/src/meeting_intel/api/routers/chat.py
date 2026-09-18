@@ -19,8 +19,10 @@ from meeting_intel.db.models import (
     ConversationKind,
     Message,
     MessageRole,
+    HistoricalDocument,
 )
 from meeting_intel.db.session import get_db
+from meeting_intel.retrieval.restore_imports import ImportedContentUnavailableError
 from meeting_intel.security.authz import audit, get_authorized_conversation, get_authorized_meeting
 
 router = APIRouter(prefix="/api", tags=["chat"])
@@ -39,6 +41,15 @@ async def chat(
     db: AsyncSession = Depends(get_db),
 ) -> ChatResponse:
     meeting = await get_authorized_meeting(db, user=ctx.user, meeting_id=payload.meeting_id)
+    document = None
+    if payload.document_id:
+        document = (await db.execute(select(HistoricalDocument).where(
+            HistoricalDocument.id == payload.document_id,
+            HistoricalDocument.tenant_id == ctx.tenant_id,
+            HistoricalDocument.meeting_id == meeting.id,
+        ))).scalar_one_or_none()
+        if document is None:
+            raise HTTPException(404, "Document not found in this meeting")
 
     if payload.conversation_id:
         conversation = await get_authorized_conversation(db, user=ctx.user, conversation_id=payload.conversation_id)
@@ -71,7 +82,13 @@ async def chat(
     )
     await db.flush()
 
-    result = await answer_question(db, meeting=meeting, user=ctx.user, history=history, question=payload.message)
+    try:
+        result = await answer_question(
+            db, meeting=meeting, user=ctx.user, history=[] if document else history,
+            question=payload.message, document=document,
+        )
+    except ImportedContentUnavailableError as exc:
+        raise HTTPException(503, str(exc)) from exc
 
     assistant_message = Message(
         conversation_id=conversation.id,

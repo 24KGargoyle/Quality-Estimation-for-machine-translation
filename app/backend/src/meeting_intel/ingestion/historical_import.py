@@ -235,7 +235,7 @@ async def _process_one(job_id: str, tenant_id: str, user_id: str, staged: Staged
                 doc_row = HistoricalDocument(
                     tenant_id=tenant_id, meeting_id=meeting.id, import_job_id=job_id,
                     source_file=staged.filename, relative_path=staged.relative_path, file_type=file_type,
-                    document_type=parser.document_type, file_hash=h, blob_path=blob_path,
+                    document_type=result.documents[0].document_type, file_hash=h, blob_path=blob_path,
                     size_bytes=len(staged.content), chunk_count=chunk_count,
                 )
                 db.add(doc_row)
@@ -268,12 +268,13 @@ async def _process_one(job_id: str, tenant_id: str, user_id: str, staged: Staged
                     await _bump(job_id, processed_files=1, skipped_files=1)
                     return
 
-                if file_type == "vtt":
+                if any(d.document_type == "transcript" for d in result.documents):
                     meeting.transcript_available = True
                     if meeting.status != MeetingStatus.ready:
                         meeting.status = MeetingStatus.ready
-                    max_end = max((d.end_time or 0.0 for d in result.documents), default=0.0)
-                    meeting.duration_seconds = int(max(meeting.duration_seconds or 0, max_end))
+                    if any(d.end_time is not None for d in result.documents):
+                        max_end = max((d.end_time or 0.0 for d in result.documents), default=0.0)
+                        meeting.duration_seconds = int(max(meeting.duration_seconds or 0, max_end))
 
                 db.add(ImportedFileResult(
                     import_job_id=job_id, filename=staged.filename, relative_path=staged.relative_path,
