@@ -124,7 +124,7 @@ class GraphClient:
         )
         return await self._get_text(url)
 
-    async def get_attendance_report(self, *, organizer_user_id: str, online_meeting_id: str) -> list[dict]:
+    async def get_attendance_report(self, *, organizer_user_id: str, online_meeting_id: str, strict: bool = False) -> list[dict]:
         """Best-effort participant list via the latest attendance report. Returns [] on failure."""
         self._require_configured()
         try:
@@ -134,14 +134,40 @@ class GraphClient:
             values = reports.get("value", [])
             if not values:
                 return []
-            latest = values[-1]["id"]
+            latest = max(values, key=lambda r: r.get("meetingEndDateTime", ""))["id"]
             records = await self._get(
                 f"{GRAPH_BASE}/users/{organizer_user_id}/onlineMeetings/{online_meeting_id}"
                 f"/attendanceReports/{latest}/attendanceRecords"
             )
-            return records.get("value", [])
+            result = records.get("value", [])
+            visited = set()
+            while records.get("@odata.nextLink"):
+                url = records["@odata.nextLink"]
+                self._validate_graph_url(url)
+                if url in visited or len(visited) >= 100:
+                    raise GraphNotConfiguredError("Attendance pagination incomplete")
+                visited.add(url)
+                records = await self._get(url)
+                result.extend(records.get("value", []))
+            return result
         except (GraphMeetingNotFoundError, GraphTransientError, httpx.HTTPStatusError):
+            if strict:
+                raise
             return []
+
+    async def resolve_user_by_upn(self, upn_or_email: str) -> dict | None:
+        """Best-effort app-only lookup of an Entra user by UPN/email — used
+        by `teams/participant_resolver.py` to resolve a meeting attendee who
+        only has an email on file (from the attendance report) into a real
+        Entra object id. Returns None (never raises) when not found or on
+        any transient failure, since this is explicitly best-effort: a
+        failed lookup means `resolved=False` for that participant, not an
+        error for the whole request."""
+        self._require_configured()
+        try:
+            return await self._get(f"{GRAPH_BASE}/users/{upn_or_email}")
+        except (GraphMeetingNotFoundError, GraphTransientError, httpx.HTTPStatusError):
+            return None
 
     async def send_chat_message(self, *, chat_id: str, content_html: str) -> dict:
         """Post an AI-shared context message into a Teams chat (least-privilege: Chat.ReadWrite)."""
@@ -152,6 +178,89 @@ class GraphClient:
             resp = await client.post(
                 url,
                 headers={"Authorization": f"Bearer {token}"},
+                json={"body": {"contentType": "html", "content": content_html}},
+            )
+        resp.raise_for_status()
+        return resp.json()
+
+    # ------------------------------------------------------------------
+    # Delegated user-context calls (§14 of the Search Intelligence + Teams
+    # Collaboration upgrade — "prefer delegated user context"). Each takes an
+    # already-acquired delegated access token (see graph/delegated_auth.py)
+    # rather than the app-only token above: these act on the signed-in
+    # user's own chats/permissions, never with broader app-only access.
+    # ------------------------------------------------------------------
+
+    async def _delegated_get(self, url: str, access_token: str, *, params: dict | None = None) -> dict:
+        self._require_configured()
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(url, headers={"Authorization": f"Bearer {access_token}"}, params=params)
+        resp.raise_for_status()
+        return resp.json()
+
+    @staticmethod
+    def _validate_graph_url(url: str) -> None:
+        from urllib.parse import urlsplit
+        parsed = urlsplit(url)
+        if parsed.scheme != "https" or parsed.netloc != "graph.microsoft.com" or not parsed.path.startswith("/v1.0/"):
+            raise GraphNotConfiguredError("Invalid Graph pagination URL")
+
+    async def _delegated_pages(self, url: str, token: str) -> list[dict]:
+        result = []
+        visited = set()
+        while url:
+            self._validate_graph_url(url)
+            if url in visited or len(visited) >= 100:
+                raise GraphNotConfiguredError("Graph result set could not be completely inspected.")
+            visited.add(url)
+            page = await self._delegated_get(url, token)
+            result.extend(page.get("value", []))
+            url = page.get("@odata.nextLink")
+        return result
+
+    async def list_my_group_chats(self, access_token: str) -> list[dict]:
+        chats = await self._delegated_pages(f"{GRAPH_BASE}/me/chats?$top=50", access_token)
+        result = []
+        for chat in chats:
+            if chat.get("chatType") != "group":
+                continue
+            chat["members"] = await self.get_chat_members(access_token, chat_id=chat["id"])
+            result.append(chat)
+        return result
+
+    async def get_chat_members(self, access_token: str, *, chat_id: str) -> list[dict]:
+        from urllib.parse import quote
+        return await self._delegated_pages(f"{GRAPH_BASE}/chats/{quote(chat_id, safe='')}/members", access_token)
+
+    async def create_group_chat(self, access_token: str, *, member_user_ids: list[str], topic: str) -> dict:
+        """Creates a new Teams group chat containing the signed-in user plus
+        each given Entra object id, with the given topic (delegated
+        `Chat.ReadWrite`). Never called with unvalidated ids — the caller
+        (api/routers/discussions.py) has already checked each id against the
+        meeting's resolved, authorized participants."""
+        self._require_configured()
+        members = [
+            {
+                "@odata.type": "#microsoft.graph.aadUserConversationMember",
+                "roles": ["owner"],
+                "user@odata.bind": f"https://graph.microsoft.com/v1.0/users('{uid}')",
+            }
+            for uid in member_user_ids
+        ]
+        body = {"chatType": "group", "topic": topic, "members": members}
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post(
+                f"{GRAPH_BASE}/chats", headers={"Authorization": f"Bearer {access_token}"}, json=body
+            )
+        resp.raise_for_status()
+        return resp.json()
+
+    async def send_chat_message_delegated(self, access_token: str, *, chat_id: str, content_html: str) -> dict:
+        self._require_configured()
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post(
+                f"{GRAPH_BASE}/chats/{chat_id}/messages",
+                headers={"Authorization": f"Bearer {access_token}"},
                 json={"body": {"contentType": "html", "content": content_html}},
             )
         resp.raise_for_status()

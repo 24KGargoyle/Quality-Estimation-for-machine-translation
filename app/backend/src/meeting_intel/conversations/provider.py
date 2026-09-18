@@ -55,9 +55,5 @@ class TeamsChatProvider(ConversationProvider):
 
 
 async def get_provider(db: AsyncSession, *, group_id: str) -> ConversationProvider:
-    mapping = (
-        await db.execute(select(TeamsMapping).where(TeamsMapping.group_id == group_id))
-    ).scalar_one_or_none()
-    if mapping and mapping.teams_chat_id:
-        return TeamsChatProvider(mapping.teams_chat_id)
+    # External sends use the separately confirmed delegated Teams workflow.
     return InternalChatProvider()

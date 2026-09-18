@@ -43,8 +43,22 @@ def _msal_app() -> msal.ConfidentialClientApplication:
     )
 
 
+#: Delegated Teams-chat scopes requested at login, alongside `User.Read`, so
+#: "Discuss with Group" can act on the signed-in user's own behalf (list
+#: their chats, create a group chat, send a message) — see
+#: docs/MICROSOFT_GRAPH_PERMISSIONS.md "Delegated user context". Requesting
+#: them here does not itself grant anything: the tenant admin/user must
+#: still consent, and every caller of the resulting token
+#: (graph/delegated_auth.py) treats "no token stored" as a normal,
+#: clearly-reported "not configured" state, never a hard failure of sign-in.
+CHAT_SCOPES = ["Chat.ReadBasic", "ChatMember.Read", "Chat.Create", "ChatMessage.Send"]
+
+
 def _scopes() -> list[str]:
-    return [f"https://graph.microsoft.com/{s}" if "/" not in s else s for s in ["User.Read"]]
+    return [
+        f"https://graph.microsoft.com/{s}" if "/" not in s else s
+        for s in ["User.Read", *CHAT_SCOPES]
+    ]
 
 
 def get_login_url(state: str) -> str:
@@ -80,6 +94,8 @@ async def acquire_token_by_auth_code(code: str) -> dict:
     return {
         "access_token": result["access_token"],
         "refresh_token": result.get("refresh_token"),
+        "expires_in": result.get("expires_in", 3600),
+        "scope": result.get("scope", ""),
         "id_token_claims": result.get("id_token_claims", {}),
         "profile": profile,
     }

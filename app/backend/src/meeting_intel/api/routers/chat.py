@@ -3,6 +3,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from meeting_intel.agents.answer_agent import answer_question
+from meeting_intel.agents.intelligence_panel import build_intelligence_panel
+from meeting_intel.api.intelligence_schema import panel_to_schema
 from meeting_intel.api.schemas import (
     ChatRequest,
     ChatResponse,
@@ -18,6 +20,7 @@ from meeting_intel.db.models import (
     Conversation,
     ConversationKind,
     Message,
+    MeetingParticipant,
     MessageRole,
     HistoricalDocument,
 )
@@ -53,6 +56,8 @@ async def chat(
 
     if payload.conversation_id:
         conversation = await get_authorized_conversation(db, user=ctx.user, conversation_id=payload.conversation_id)
+        if conversation.meeting_id != meeting.id:
+            raise HTTPException(400, "Conversation belongs to a different meeting")
     else:
         conversation = Conversation(
             tenant_id=ctx.tenant_id,
@@ -134,8 +139,8 @@ async def chat(
         sources_out.append(
             SourceSchema(
                 speaker=s.speaker,
-                start_timestamp=_fmt_ts(s.start_seconds),
-                end_timestamp=_fmt_ts(s.end_seconds),
+                start_timestamp=_fmt_ts(s.start_seconds) if s.file_type == "vtt" else None,
+                end_timestamp=_fmt_ts(s.end_seconds) if s.file_type == "vtt" else None,
                 excerpt=s.excerpt,
                 source=s.source_file or "Meeting transcript",
                 source_file=s.source_file,
@@ -160,6 +165,16 @@ async def chat(
     )
     await db.commit()
 
+    participant_names = (
+        await db.execute(select(MeetingParticipant.display_name).where(MeetingParticipant.meeting_id == meeting.id))
+    ).scalars().all()
+    cited_files = {s.source_file for s in result.sources if s.source_file}
+    panel = await build_intelligence_panel(
+        tenant_id=ctx.tenant_id, meeting_id=meeting.id, question=payload.message,
+        chunks=result.retrieved_chunks, participant_names=list(participant_names),
+        mentioned_people=result.mentioned_people, cited_source_files=cited_files,
+    )
+
     return ChatResponse(
         conversation_id=conversation.id,
         message_id=assistant_message.id,
@@ -168,6 +183,14 @@ async def chat(
         cross_meeting=result.cross_meeting,
         speaker_filter=result.speaker_filter,
         sources=sources_out,
+        evidence=[SourceSchema(speaker=r.chunk.speaker,
+            start_timestamp=_fmt_ts(r.chunk.start_seconds) if r.chunk.file_type == "vtt" else None,
+            end_timestamp=_fmt_ts(r.chunk.end_seconds) if r.chunk.file_type == "vtt" else None,
+            excerpt=r.chunk.content, source=r.chunk.source_file or "Meeting transcript",
+            source_file=r.chunk.source_file, file_type=r.chunk.file_type, document_type=r.chunk.document_type,
+            page_number=r.chunk.page_number, sheet_name=r.chunk.sheet_name, slide_number=r.chunk.slide_number,
+            section=r.chunk.section) for r in result.retrieved_chunks],
+        intelligence=panel_to_schema(panel),
     )
 
 
@@ -212,8 +235,8 @@ async def get_conversation(
                 sources = [
                     SourceSchema(
                         speaker=s.speaker,
-                        start_timestamp=_fmt_ts(s.start_seconds),
-                        end_timestamp=_fmt_ts(s.end_seconds),
+                        start_timestamp=_fmt_ts(s.start_seconds) if s.file_type == "vtt" else None,
+                        end_timestamp=_fmt_ts(s.end_seconds) if s.file_type == "vtt" else None,
                         excerpt=s.excerpt,
                         source=s.source_file or "Meeting transcript",
                         source_file=s.source_file,

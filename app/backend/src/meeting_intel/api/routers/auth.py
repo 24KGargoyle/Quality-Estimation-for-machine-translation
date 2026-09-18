@@ -9,6 +9,7 @@ from meeting_intel.api.schemas import DevLoginRequest, EntraCallbackRequest, Log
 from meeting_intel.config import get_settings
 from meeting_intel.db.models import Tenant, User, UserRole
 from meeting_intel.db.session import get_db
+from meeting_intel.graph.delegated_auth import store_delegated_token
 from meeting_intel.security.jwt import create_session_token
 from meeting_intel.security.session_security import consume_oauth_state, create_oauth_state, revoke_token
 
@@ -76,13 +77,15 @@ async def entra_callback(payload: EntraCallbackRequest, db: AsyncSession = Depen
     display_name = profile.get("displayName", email)
     ms_tenant_id = result["id_token_claims"].get("tid")
 
+    if not ms_tenant_id or ms_tenant_id != settings.ms_tenant_id:
+        raise HTTPException(403, "Microsoft tenant is not authorized")
     tenant = (await db.execute(select(Tenant).where(Tenant.ms_tenant_id == ms_tenant_id))).scalar_one_or_none()
     if tenant is None:
         tenant = Tenant(name=ms_tenant_id, ms_tenant_id=ms_tenant_id)
         db.add(tenant)
         await db.flush()
 
-    user = (await db.execute(select(User).where(User.ms_object_id == ms_object_id))).scalar_one_or_none()
+    user = (await db.execute(select(User).where(User.ms_object_id == ms_object_id, User.tenant_id == tenant.id))).scalar_one_or_none()
     if user is None:
         is_first_user = (
             await db.execute(select(User).where(User.tenant_id == tenant.id))
@@ -96,6 +99,19 @@ async def entra_callback(payload: EntraCallbackRequest, db: AsyncSession = Depen
         )
         db.add(user)
         await db.flush()
+
+    # Best-effort: store the delegated Teams-chat token if the tenant/user
+    # consented to those scopes (see auth/entra.py: CHAT_SCOPES). A missing
+    # or partial grant here never blocks sign-in — "Discuss with Group"'s
+    # Teams features simply report themselves as unavailable later
+    # (graph/delegated_auth.DelegatedTokenUnavailableError) rather than
+    # failing login.
+    if result.get("access_token"):
+        await store_delegated_token(
+            db, user_id=user.id, access_token=result["access_token"], refresh_token=result.get("refresh_token"),
+            expires_in=result.get("expires_in", 3600), scope=result.get("scope", ""),
+        )
+
     await db.commit()
 
     return _token_response(user)

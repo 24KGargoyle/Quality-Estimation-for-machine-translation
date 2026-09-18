@@ -1,49 +1,34 @@
-# Microsoft Graph Permissions
+# Microsoft Graph permission matrix
 
-This platform's Graph integration (`app/backend/src/meeting_intel/graph/client.py`,
-`auth/entra.py`) requires an **Azure AD app registration** that does not exist in this
-development environment. Everything below is real, working MSAL/Graph client code — it is
-simply inert (returns `503 graph_not_configured`) until these are provisioned. See
-`ARCHITECTURE_ASSESSMENT.md` and `docs/DEPLOYMENT.md` for how to supply them.
+The existing FastAPI/Next.js, Azure SQL, Azure AI Search and Azure OpenAI architecture is retained. Teams integration is optional; no PostgreSQL or pgvector is required.
 
-## App registration
+| Operation | Permission | Context | Endpoint |
+| --- | --- | --- | --- |
+| Signed-in profile | User.Read | Delegated | GET /me |
+| List accessible chats | Chat.ReadBasic | Delegated | GET /me/chats |
+| Inspect complete chat membership | ChatMember.Read | Delegated | GET /chats/{id}/members |
+| Create a confirmed group | Chat.Create | Delegated | POST /chats |
+| Send a confirmed discussion | ChatMessage.Send | Delegated | POST /chats/{id}/messages |
+| Meeting discovery | OnlineMeetings.Read.All | Application | GET /users/{organizer}/onlineMeetings |
+| Transcript ingestion | OnlineMeetingTranscript.Read.All | Application | GET .../transcripts |
+| Attendance resolution | OnlineMeetingArtifact.Read.All | Application | GET .../attendanceReports/.../attendanceRecords |
 
-- **Redirect URI**: `{MS_REDIRECT_URI}` (web platform, authorization code + PKCE flow), used for
-  user sign-in (`auth/entra.py`).
-- **Client credentials flow**: used for server-side meeting/transcript retrieval
-  (`graph/client.py`), since a backend job needs to read a meeting's transcript independent of
-  any interactively signed-in user's token lifetime.
+Application meeting permissions require admin consent and a Teams application access policy scoped to permitted organizers. Delegated consent remains subject to tenant policy. No directory-wide user lookup, app-only chat sending, Mail or Files permissions are needed by this workflow.
 
-## Permissions requested (least privilege)
+## Configuration and trust
 
-| Permission | Type | Why it's needed | Where used | Admin consent |
-|---|---|---|---|---|
-| `User.Read` | Delegated | Read the signed-in user's own profile (name, email, object id) to create/match their account. | `auth/entra.py` sign-in | No |
-| `OnlineMeetings.Read.All` | Application | Look up a Teams meeting by its numeric Meeting ID (`JoinMeetingId`) and read its metadata (subject, organizer). | `graph/client.py: find_online_meeting` | Yes |
-| `OnlineMeetingTranscript.Read.All` | Application | Read the meeting's transcript content (WebVTT) — the core input to the whole platform. | `graph/client.py: get_transcripts`, `get_transcript_content_vtt` | Yes |
-| `OnlineMeetingArtifact.Read.All` | Application | Read attendance reports for participant lists (best-effort; falls back gracefully if unavailable). | `graph/client.py: get_attendance_report` | Yes |
-| `Chat.ReadWrite` | Application | Post the AI-shared meeting context card into a Teams chat when "Discuss with Group" targets a Teams-mapped group. | `graph/client.py: send_chat_message`, `conversations/provider.py: TeamsChatProvider` | Yes |
-| `ChannelMessage.Send` | Application | Same as above, for a Teams channel rather than a 1:1/group chat. | (extension point in `TeamsChatProvider`; channel posting follows the same `send_chat_message`-style call against the channel messages endpoint) | Yes |
+Set MS_TENANT_ID, MS_CLIENT_ID, MS_CLIENT_SECRET, MS_REDIRECT_URI and AUTH_PROVIDER=entra. Set GRAPH_TOKEN_ENCRYPTION_KEY to a dedicated Fernet key stored as a deployment secret, then sign in again. Tokens are encrypted at rest, never returned to the browser, and refreshed server-side. Losing or rotating the key requires reauthentication. Run `alembic upgrade head` to add the token table.
 
-**Not requested**: `Mail.*`, `Files.*`, `Directory.*`, `User.ReadWrite.All`, or any permission
-broader than what the meeting-intelligence and group-sharing features actually need. Application
-permissions additionally require a **Cloud Communications application access policy**
-(`Grant-CsApplicationAccessPolicy`) scoping which organizers' meetings this app may read —
-without it, `OnlineMeetings.Read.All`/`OnlineMeetingTranscript.Read.All` alone are not sufficient
-to read a given organizer's meetings, even with admin consent. This is Microsoft's own
-least-privilege mechanism on top of app registration and is documented here so whoever
-provisions the tenant applies it per-organizer rather than tenant-wide.
+Only actual attendance identities explicitly associated with the configured Entra tenant are resolved. Historical names, external attendees and incomplete records remain unresolved; no name or email guessing is used. Chat lists and member lists are paginated. Matching requires exact identity sets; extra or unknown members prevent a match. User, meeting, group, message and mapping authorization is checked server-side. Caller membership is checked again before sending. Local group sharing stays internal, even for a mapped group.
 
-## Security implications
+Creation requires `confirmed: true`; sending is a separate confirmation and requires a saved `message_id`. Saved answer and references are loaded server-side and escaped before Teams HTML rendering. Graph failures return unavailable/error states and never simulated success. After a timeout, check Teams before retrying because Graph may have accepted a request before the response was lost.
 
-- Application-permission tokens (client credentials) grant this backend service the ability to
-  read *any* meeting covered by the application access policy — treat `MS_CLIENT_SECRET` as a
-  high-value secret (see `docs/SECURITY.md`: never committed, rotated via the deployment's
-  secret manager).
-- Because transcript content can include anything said in the meeting, it is treated as
-  untrusted data everywhere it's used in a prompt (`docs/AGENT_ARCHITECTURE.md`,
-  prompt-injection section of `docs/SECURITY.md`) — Graph read access does not imply the
-  transcript content is trusted instruction text.
-- `Chat.ReadWrite`/`ChannelMessage.Send` let this app post messages as itself into Teams
-  conversations; the "Discuss with Group" flow only ever posts a condensed, explicitly-user-
-  triggered context card — never the full transcript, and never automatically.
+## Microsoft documentation
+
+- [List chats](https://learn.microsoft.com/en-us/graph/api/chat-list?view=graph-rest-1.0)
+- [List chat members](https://learn.microsoft.com/en-us/graph/api/chat-list-members?view=graph-rest-1.0)
+- [Create chat](https://learn.microsoft.com/en-us/graph/api/chat-post?view=graph-rest-1.0)
+- [Send chat message](https://learn.microsoft.com/en-us/graph/api/chat-post-messages?view=graph-rest-1.0)
+- [Attendance record](https://learn.microsoft.com/en-us/graph/api/resources/attendancerecord?view=graph-rest-1.0)
+
+Live tenant consent, application access policy and Teams delivery still require deployment validation. Mocked tests do not establish those capabilities.

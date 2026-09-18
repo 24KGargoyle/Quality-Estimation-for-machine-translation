@@ -1,12 +1,14 @@
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
+from sqlalchemy import select, func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from meeting_intel.agents.discussion_agent import assist_discussion
 from meeting_intel.api.schemas import GroupCreateRequest, GroupMessageRequest, GroupMessageSchema, GroupSummary
+from meeting_intel.api.schemas import GroupAddMemberRequest, GroupMembersResponse, GroupMemberSchema
 from meeting_intel.auth.deps import RequestContext, get_current_context
 from meeting_intel.conversations.provider import get_provider
-from meeting_intel.db.models import Group, GroupMember, Meeting, Message, MessageRole, User
+from meeting_intel.db.models import Group, GroupMember, Meeting, Message, MessageRole, User, UserRole
 from meeting_intel.db.session import SessionLocal, get_db
 from meeting_intel.security.authz import audit, get_authorized_group
 from meeting_intel.security.jwt import InvalidTokenError, decode_session_token
@@ -56,6 +58,51 @@ async def list_groups(
         )
         results.append(GroupSummary(id=g.id, name=g.name, member_count=count))
     return results
+
+
+@router.get("/{group_id}/members", response_model=GroupMembersResponse)
+async def list_group_members(
+    group_id: str, ctx: RequestContext = Depends(get_current_context), db: AsyncSession = Depends(get_db),
+) -> GroupMembersResponse:
+    group = await get_authorized_group(db, user=ctx.user, group_id=group_id)
+    users = (await db.execute(
+        select(User).join(GroupMember, GroupMember.user_id == User.id).where(
+            GroupMember.group_id == group.id, User.tenant_id == ctx.tenant_id,
+        ).order_by(User.display_name, User.email)
+    )).scalars().all()
+    return GroupMembersResponse(
+        members=[GroupMemberSchema(id=u.id, display_name=u.display_name, email=u.email) for u in users],
+        can_manage=group.created_by == ctx.user.id or ctx.user.role == UserRole.admin,
+    )
+
+
+@router.post("/{group_id}/members", response_model=GroupMembersResponse)
+async def add_group_member(
+    group_id: str, payload: GroupAddMemberRequest,
+    ctx: RequestContext = Depends(get_current_context), db: AsyncSession = Depends(get_db),
+) -> GroupMembersResponse:
+    group = await get_authorized_group(db, user=ctx.user, group_id=group_id)
+    if group.created_by != ctx.user.id and ctx.user.role != UserRole.admin:
+        raise HTTPException(403, "Only the group creator or an administrator can add members")
+    member = (await db.execute(select(User).where(
+        User.tenant_id == ctx.tenant_id, func.lower(User.email) == payload.email.strip().lower(),
+    ))).scalars().first()
+    if member is None:
+        raise HTTPException(404, "No registered user with that email in your organization. They must sign in first.")
+    existing = (await db.execute(select(GroupMember.id).where(
+        GroupMember.group_id == group.id, GroupMember.user_id == member.id,
+    ))).scalar_one_or_none()
+    if existing is None:
+        db.add(GroupMember(group_id=group.id, user_id=member.id))
+        await audit(db, tenant_id=ctx.tenant_id, user_id=ctx.user.id, action="group.member.add",
+                    resource_type="group", resource_id=group.id, request_id=ctx.request_id,
+                    extra={"member_user_id": member.id})
+        try:
+            await db.commit()
+        except IntegrityError:
+            await db.rollback()
+            raise HTTPException(409, "Membership changed. Refresh the member list and try again.") from None
+    return await list_group_members(group_id, ctx, db)
 
 
 @router.get("/{group_id}/messages", response_model=list[GroupMessageSchema])

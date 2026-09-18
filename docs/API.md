@@ -25,6 +25,8 @@ Request/response bodies are typed via Pydantic schemas in `app/backend/src/meeti
 | `/api/meetings/{meeting_id}` | GET | Meeting detail + participants + `documents` (supporting files imported via Historical Meeting Data Import, if any). `404` if not found or not authorized (identical response either way — existence is never revealed to an unauthorized caller). |
 | `/api/meetings/{meeting_id}/search` | GET | `?q=...` — direct hybrid search over one meeting's transcript **and** any imported documents, no LLM call. Powers the Search tab. Each result includes citation metadata (`source_file`, `file_type`, `document_type`, `page_number`, `sheet_name`, `slide_number`, `section`). |
 | `/api/meetings/{meeting_id}/sources` | GET | All indexed chunks for a meeting — transcript and documents alike (raw source browser). |
+| `/api/meetings/{meeting_id}/intelligence` | GET | `?q=...` — Related Intelligence sidebar (topics, documents, people, ideas, optional web research) for a query, without an LLM call. Powers the Search page's sidebar; see `docs/SEARCH_INTELLIGENCE.md`. |
+| `/api/meetings/{meeting_id}/participants/resolved` | GET | Resolves this meeting's participants to Entra identities where possible (`MeetingParticipantResolver`) — each entry reports `resolved: true/false` and never guesses an id from a display name alone. |
 
 ## Historical Meeting Data Import
 
@@ -41,7 +43,7 @@ See `docs/HISTORICAL_IMPORT.md` for the full pipeline, meeting-association rules
 
 | Endpoint | Method | Description |
 |---|---|---|
-| `/api/chat` | POST | `{meeting_id, conversation_id?, message}` → grounded answer + sources. Creates a conversation if `conversation_id` is omitted. |
+| `/api/chat` | POST | `{meeting_id, conversation_id?, message}` → grounded answer + sources + `intelligence` (Related Intelligence sidebar, see `docs/SEARCH_INTELLIGENCE.md`). Creates a conversation if `conversation_id` is omitted. |
 | `/api/conversations` | GET | The caller's private conversations. |
 | `/api/conversations/{conversation_id}` | GET | Full message history + sources for one conversation. `404` if it belongs to another user. |
 
@@ -51,6 +53,8 @@ See `docs/HISTORICAL_IMPORT.md` for the full pipeline, meeting-association rules
 |---|---|---|
 | `/api/groups` | POST | `{name, member_user_ids?}` — create a group; creator is auto-added. |
 | `/api/groups` | GET | Groups the caller is a member of. |
+| `/api/groups/{group_id}/members` | GET | Returns `{members: [{id, display_name, email}], can_manage}` to group members and administrators in the same organization. |
+| `/api/groups/{group_id}/members` | POST | `{email}` adds an existing user in the same organization. Only the creator or an administrator can add members. Repeated additions are harmless. New members can read existing group messages; this does not send invitations or change Teams membership. |
 | `/api/groups/{group_id}/messages` | GET | Group message history. |
 | `/api/groups/{group_id}/messages` | POST | `{content, ask_ai?}` — post a message; if `ask_ai`, the Discussion Agent also replies. Broadcasts over WebSocket. |
 | `/api/groups/{group_id}/ws` | WebSocket | `?token=<session token>` — real-time message delivery. |
@@ -72,6 +76,9 @@ See `docs/HISTORICAL_IMPORT.md` for the full pipeline, meeting-association rules
 | `/api/discussions/{discussion_id}/decisions` | POST | `{decision_text, action_items}` — human-confirmed decision capture; creates `Decision` (status `confirmed`) + `ActionItem` rows. |
 | `/api/discussions/groups/{group_id}/decisions` | GET | Confirmed decisions for a group. |
 | `/api/discussions/groups/{group_id}/action-items` | GET | Action items for a group. |
+| `/api/discussions/find-teams-group` | POST | `{meeting_id}` — resolves meeting participants to Entra identities and searches the caller's own Teams chats (delegated Graph token) for an existing group matching them. Returns `teams_available: false` with a reason if Graph isn't configured or the caller has no stored Teams consent — never a fabricated match. See `docs/SEARCH_INTELLIGENCE.md` ("Discuss with Group v2"). |
+| `/api/discussions/create-teams-group` | POST | `{meeting_id, participant_user_ids, topic, confirmed: true}` — creates a real Teams group chat via Microsoft Graph. Every participant id is re-validated server-side against the meeting's resolved/authorized participants before any Graph call; `400` if any id isn't authorized. Binds the new chat to an application `Group` + `TeamsMapping`. |
+| `/api/discussions/send-teams-discussion` | POST | `{meeting_id, group_id, message_id, recipient_user_ids, topic, summary, question, confirmed: true}` — sends a concise, evidence-grounded message (never raw retrieval context) into a Teams-mapped group chat. Re-fetches the chat's live membership from Graph immediately before sending and rejects (`403`) if the caller is no longer a member. |
 
 ## Health
 
@@ -84,3 +91,5 @@ See `docs/HISTORICAL_IMPORT.md` for the full pipeline, meeting-association rules
 Unhandled errors return `{"detail": "Internal server error", "request_id": "..."}` — never a
 stack trace (see `main.py`'s global exception handler). Expected errors (`401`/`403`/`404`/`503`)
 return `{"detail": "<message>"}`.
+
+Teams sends load the saved answer and source excerpts from the authorized private conversation. Client summary/evidence fields are retained for compatibility but are not trusted or sent. Recipient IDs must exactly match current Graph membership and be resolved meeting attendees or the caller. Membership changes return 409. Chat responses additionally contain bounded `evidence` and `intelligence`.

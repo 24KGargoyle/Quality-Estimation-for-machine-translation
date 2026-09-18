@@ -16,26 +16,9 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Local SQLite and Azure SQL use application/Azure AI Search indexes.
-    if op.get_bind().dialect.name != "postgresql":
-        return
-    # Generated tsvector column for keyword search over transcript chunk text.
-    op.execute(
-        """
-        ALTER TABLE transcript_chunks
-        ADD COLUMN tsv tsvector
-        GENERATED ALWAYS AS (to_tsvector('english', coalesce(text, ''))) STORED
-        """
-    )
-    op.execute("CREATE INDEX ix_transcript_chunks_tsv ON transcript_chunks USING GIN (tsv)")
-
-    # No DB-side vector index here: `embedding` is plain JSON and similarity is computed
-    # in Python (retrieval/hybrid_search.py) so this app has no dependency on the
-    # `pgvector` Postgres extension, which requires compiling from source on Windows.
+    # Reserved legacy revision. Search lives in Azure AI Search (memory in tests).
+    pass
 
 
 def downgrade() -> None:
-    if op.get_bind().dialect.name != "postgresql":
-        return
-    op.execute("DROP INDEX IF EXISTS ix_transcript_chunks_tsv")
-    op.execute("ALTER TABLE transcript_chunks DROP COLUMN IF EXISTS tsv")
+    pass

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { MessageSchema, SourceSchema } from "@/lib/types";
+import TeamsDiscussModal from "./TeamsDiscussModal";
 import ShareToGroupModal from "./ShareToGroupModal";
 
 function sourceLabel(s: SourceSchema): string {
@@ -26,7 +27,8 @@ const REASONS = [
   { value: "other", label: "Other" },
 ];
 
-export default function ChatMessage({ message }: { message: MessageSchema }) {
+export default function ChatMessage({ message, meetingId, question = "" }: { message: MessageSchema; meetingId?: string; question?: string }) {
+  const [showTeams, setShowTeams] = useState(false);
   const [rating, setRating] = useState<"up" | "down" | null>(null);
   const [showReasons, setShowReasons] = useState(false);
   const [showShare, setShowShare] = useState(false);
@@ -61,14 +63,19 @@ export default function ChatMessage({ message }: { message: MessageSchema }) {
         <p className="whitespace-pre-wrap">{message.content}</p>
 
         {message.sources.length > 0 && (
-          <div className="mt-3 space-y-2 border-t border-neutral-100 pt-2 dark:border-neutral-800">
+          <details className="mt-3 border-t border-neutral-100 pt-2 dark:border-neutral-800">
+            <summary className="cursor-pointer rounded text-xs font-medium text-neutral-600 focus-visible:outline-2 focus-visible:outline-offset-4 dark:text-neutral-300">
+              View references ({message.sources.length})
+            </summary>
+            <div className="mt-2 space-y-2">
             {message.sources.map((s, i) => (
               <div key={i} className="rounded-md bg-neutral-50 px-2.5 py-1.5 text-xs dark:bg-neutral-800/60">
                 <div className="font-medium text-neutral-600 dark:text-neutral-300">{sourceLabel(s)}</div>
                 <div className="mt-0.5 text-neutral-500 dark:text-neutral-400">&ldquo;{s.excerpt}&rdquo;</div>
               </div>
             ))}
-          </div>
+            </div>
+          </details>
         )}
 
         <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-neutral-500">
@@ -89,6 +96,8 @@ export default function ChatMessage({ message }: { message: MessageSchema }) {
           </button>
         </div>
 
+        {meetingId && <button onClick={() => setShowTeams(true)} className="mt-2 text-xs underline">Discuss in Microsoft Teams</button>}
+        {showTeams && meetingId && <TeamsDiscussModal meetingId={meetingId} messageId={message.id} question={question} answer={message.content} evidence={message.sources[0]} onClose={() => setShowTeams(false)} />}
         {showReasons && (
           <div className="mt-2 flex flex-wrap gap-1.5">
             {REASONS.map((r) => (

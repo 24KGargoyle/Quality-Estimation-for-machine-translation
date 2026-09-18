@@ -20,6 +20,7 @@ from dataclasses import dataclass
 
 from meeting_intel.config import get_settings
 from meeting_intel.providers import get_embedding_provider
+from .rerank import rerank
 from .search_provider import SearchHit, SearchProvider
 
 settings = get_settings()
@@ -63,9 +64,10 @@ async def hybrid_search(
 
     provider = get_search_provider()
     hits = await provider.hybrid_search(
-        tenant_id=tenant_id, meeting_ids=meeting_ids, query=query, vector=vector, speaker=speaker, top_k=top_k,
+        tenant_id=tenant_id, meeting_ids=meeting_ids, query=query, vector=vector, speaker=speaker, top_k=min(top_k * 3, 60),
         **({"document_id": document_id} if document_id else {}),
     )
+    hits = rerank(hits, query=query, speaker=speaker)[:top_k]
     return [
         RetrievedChunk(chunk=hit, score=hit.score, vector_rank=hit.vector_rank, keyword_rank=hit.keyword_rank)
         for hit in hits

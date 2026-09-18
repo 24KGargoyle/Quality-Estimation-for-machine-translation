@@ -21,7 +21,37 @@ os.environ.setdefault("DATABASE_URL", TEST_DATABASE_URL)
 os.environ.setdefault("AUTH_PROVIDER", "dev")
 os.environ.setdefault("APP_ENV", "local")
 os.environ.setdefault("SECRET_KEY", "test-secret")
-os.environ.setdefault("SEARCH_PROVIDER", "memory")
+os.environ["SEARCH_PROVIDER"] = "memory"
+os.environ["EMBEDDING_PROVIDER"] = "local"
+os.environ["LLM_PROVIDER"] = "anthropic"
+os.environ["ANTHROPIC_API_KEY"] = ""
+os.environ["MS_TENANT_ID"] = ""
+os.environ["MS_CLIENT_ID"] = ""
+os.environ["MS_CLIENT_SECRET"] = ""
+os.environ["WEB_RESEARCH_PROVIDER"] = "none"
+os.environ["HF_HUB_OFFLINE"] = "1"
+os.environ["TRANSFORMERS_OFFLINE"] = "1"
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _deny_live_network():
+    """Tests may use mocked HTTP transports, never actual network sockets."""
+    import socket
+    patch = pytest.MonkeyPatch()
+    original_connect = socket.socket.connect
+    def denied(sock, address, *args, **kwargs):
+        if isinstance(address, tuple) and address[0] in ("127.0.0.1", "::1"):
+            return original_connect(sock, address)
+        raise AssertionError("Live network connections are forbidden in tests")
+    import asyncio
+    async def denied_async(*args, **kwargs):
+        raise AssertionError("Live network connections are forbidden in tests")
+    patch.setattr(asyncio.BaseEventLoop, "create_connection", denied_async)
+    patch.setattr(socket.socket, "connect", denied)
+    patch.setattr(socket.socket, "connect_ex", denied)
+    patch.setattr(socket, "create_connection", denied)
+    yield
+    patch.undo()
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -51,7 +81,7 @@ async def _clean_tables():
         from sqlalchemy import text
 
         tables = [
-            "revoked_tokens", "oauth_states", "audit_log", "action_items", "decisions", "discussions",
+            "graph_user_tokens", "revoked_tokens", "oauth_states", "audit_log", "action_items", "decisions", "discussions",
             "feedback", "ai_sources", "ai_responses", "messages", "conversation_members", "conversations",
             "group_members", "groups", "imported_file_results", "historical_documents",
             "historical_import_jobs", "meeting_transcripts", "meeting_participants", "meetings",

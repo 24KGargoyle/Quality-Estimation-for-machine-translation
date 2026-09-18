@@ -154,7 +154,7 @@ async def load_meeting_from_graph(db: AsyncSession, *, user: User, join_meeting_
             MeetingParticipant(
                 meeting_id=meeting.id,
                 display_name=identity.get("displayName", "Unknown"),
-                email=identity.get("userIdentityType") and identity.get("id"),
+                email=record.get("emailAddress"),
                 role=ParticipantRole.attendee,
             )
         )

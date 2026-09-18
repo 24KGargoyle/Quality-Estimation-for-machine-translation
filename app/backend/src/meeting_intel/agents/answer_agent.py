@@ -8,7 +8,7 @@ speaker/timestamp) to build the `AISource` records shown to the user.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,7 +21,7 @@ from meeting_intel.retrieval.hybrid_search import RetrievedChunk
 
 INSUFFICIENT_EVIDENCE_MSG = "I couldn't find enough evidence in this meeting to answer that confidently."
 LLM_UNAVAILABLE_MSG = (
-    "The AI model is not configured in this environment (missing ANTHROPIC_API_KEY), "
+    "The AI model is not configured in this environment (check the configured model provider), "
     "so I can't generate an answer right now. The retrieval below shows what evidence exists."
 )
 
@@ -54,6 +54,8 @@ class AnswerResult:
     speaker_filter: str | None = None
     model: str | None = None
     latency_ms: int | None = None
+    mentioned_people: list[str] = field(default_factory=list)
+    retrieved_chunks: list[RetrievedChunk] = field(default_factory=list)
     retrieval_query: str | None = None
 
 
@@ -79,17 +81,28 @@ def _parse_citations(text: str, chunks: list[RetrievedChunk]) -> list[SourceCita
 async def answer_question(
     db: AsyncSession, *, meeting: Meeting, user: User, history: list[dict], question: str, document=None
 ) -> AnswerResult:
-    chunks, speaker, cross_meeting = await resolve_scope_and_retrieve(
+    chunks, understanding = await resolve_scope_and_retrieve(
         db, meeting=meeting, user=user, question=question, document=document
     )
 
+    # Bound the exact evidence shown to the model; never load a full transcript.
+    bounded = []
+    remaining = 18000
+    for rc in chunks[:8]:
+        content = rc.chunk.content[:min(3000, remaining)]
+        if not content:
+            break
+        bounded.append(replace(rc, chunk=replace(rc.chunk, content=content)))
+        remaining -= len(content)
+    chunks = bounded
+    speaker, cross_meeting = understanding.person, understanding.is_cross_meeting
     if not chunks:
         return AnswerResult(
             text=INSUFFICIENT_EVIDENCE_MSG,
             evidence_sufficient=False,
             cross_meeting=cross_meeting,
             speaker_filter=speaker,
-            retrieval_query=question,
+            retrieval_query=question, mentioned_people=understanding.all_mentioned_people, retrieved_chunks=chunks,
         )
 
     system, messages = build_meeting_qa_messages(history=history, excerpts=chunks, question=question)
@@ -104,11 +117,11 @@ async def answer_question(
     except LLMNotConfiguredError:
         return AnswerResult(
             text=LLM_UNAVAILABLE_MSG,
-            sources=_parse_citations("", chunks)[:0],
+            sources=[],
             evidence_sufficient=False,
             cross_meeting=cross_meeting,
             speaker_filter=speaker,
-            retrieval_query=question,
+            retrieval_query=question, mentioned_people=understanding.all_mentioned_people, retrieved_chunks=chunks,
         )
 
     evidence_sufficient = INSUFFICIENT_EVIDENCE_MSG.lower() not in result.text.lower()
@@ -122,5 +135,5 @@ async def answer_question(
         speaker_filter=speaker,
         model=result.model,
         latency_ms=result.latency_ms,
-        retrieval_query=question,
+        retrieval_query=question, mentioned_people=understanding.all_mentioned_people, retrieved_chunks=chunks,
     )

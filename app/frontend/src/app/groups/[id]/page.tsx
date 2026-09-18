@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import RequireAuth from "@/components/RequireAuth";
+import GroupMembers from "@/components/GroupMembers";
 import { useAuth } from "@/lib/auth";
 import { api, wsBase } from "@/lib/api";
 import { ActionItemSchema, DecisionSchema, GroupMessageSchema, SuggestedDecision } from "@/lib/types";
@@ -142,6 +143,7 @@ function GroupWorkspace() {
       </div>
 
       <aside className="space-y-4">
+        <GroupMembers key={groupId} groupId={groupId} />
         {discussionId && (
           <div className="rounded-xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
             <h3 className="text-sm font-semibold">Decision detection</h3>

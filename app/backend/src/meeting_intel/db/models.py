@@ -412,6 +412,25 @@ class OAuthState(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
+class GraphUserToken(Base, TimestampMixin):
+    """A delegated Microsoft Graph access/refresh token for one signed-in
+    user, acquired during Entra ID login when Teams chat scopes
+    (Chat.Read/Chat.ReadWrite/ChatMessage.Send) were consented to. Stored
+    server-side only — never returned to the frontend or logged — and used
+    solely to act on the user's own behalf for Teams chat listing/creation/
+    sending (see graph/delegated_auth.py, docs/MICROSOFT_GRAPH_PERMISSIONS.md
+    "Delegated user context")."""
+
+    __tablename__ = "graph_user_tokens"
+
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    access_token: Mapped[str] = mapped_column(Text)
+    refresh_token: Mapped[str | None] = mapped_column(Text, nullable=True)
+    scope: Mapped[str] = mapped_column(String(500))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
 class RevokedToken(Base):
     """A session token's `jti`, recorded here on logout so it is rejected
     immediately rather than remaining valid until its natural JWT expiry."""

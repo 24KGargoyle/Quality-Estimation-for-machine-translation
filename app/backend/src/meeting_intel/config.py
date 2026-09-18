@@ -55,6 +55,7 @@ class Settings(BaseSettings):
     auth_provider: Literal["entra", "dev"] = "dev"
 
     # --- Microsoft Entra ID / Graph (required when auth_provider=entra) ---
+    graph_token_encryption_key: str | None = None
     ms_tenant_id: str | None = None
     ms_client_id: str | None = None
     ms_client_secret: str | None = None
@@ -98,6 +99,13 @@ class Settings(BaseSettings):
     # --- Retrieval ---
     retrieval_top_k: int = 8
     retrieval_min_score: float = 0.15
+
+    # --- Web Research (Related Intelligence sidebar) ---
+    # "none" (default): the sidebar's Web Research section is always empty,
+    #   honestly labeled as not configured — never a fabricated result.
+    # Optional Azure Responses web search, only for explicit research requests.
+    web_research_provider: Literal["none", "azure_openai"] = "none"
+    web_research_deployment: str | None = None
 
     # --- Historical Meeting Data Import ---
     # "local" (default): a real, working on-disk store for dev/tests — NOT

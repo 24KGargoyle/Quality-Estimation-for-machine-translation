@@ -3,6 +3,7 @@ directly from an endpoint — these schemas are the only API contract."""
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -92,8 +93,8 @@ class MeetingDetail(MeetingSummary):
 
 class SourceSchema(BaseModel):
     speaker: str | None
-    start_timestamp: str
-    end_timestamp: str
+    start_timestamp: str | None
+    end_timestamp: str | None
     excerpt: str
     source: str = "Meeting transcript"
     # Historical-document citation metadata — null for a transcript source.
@@ -113,6 +114,34 @@ class ChatRequest(BaseModel):
     message: str
 
 
+class RelatedDocumentSchema(BaseModel):
+    source_file: str
+    document_type: str
+    file_type: str
+    location: str | None = None
+
+
+class WebResultSchema(BaseModel):
+    title: str
+    snippet: str
+    url: str
+
+
+class WebResearchSchema(BaseModel):
+    configured: bool
+    query: str
+    results: list[WebResultSchema]
+    note: str | None = None
+
+
+class IntelligencePanelSchema(BaseModel):
+    related_topics: list[str]
+    related_documents: list[RelatedDocumentSchema]
+    related_people: list[str]
+    ideas: list[str]
+    web_research: WebResearchSchema | None = None
+
+
 class ChatResponse(BaseModel):
     conversation_id: str
     message_id: str
@@ -121,6 +150,8 @@ class ChatResponse(BaseModel):
     cross_meeting: bool
     speaker_filter: str | None
     sources: list[SourceSchema]
+    evidence: list[SourceSchema] = Field(default_factory=list)
+    intelligence: IntelligencePanelSchema | None = None
 
 
 class ConversationSummary(BaseModel):
@@ -148,6 +179,21 @@ class ConversationDetail(ConversationSummary):
 
 
 # --- Groups ---
+
+
+class GroupMemberSchema(BaseModel):
+    id: str
+    display_name: str
+    email: str
+
+
+class GroupMembersResponse(BaseModel):
+    members: list[GroupMemberSchema]
+    can_manage: bool
+
+
+class GroupAddMemberRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
 
 
 class GroupCreateRequest(BaseModel):
@@ -259,3 +305,72 @@ class ImportedFileResultSchema(BaseModel):
 class ImportJobResults(BaseModel):
     job: ImportJobSummary
     results: list[ImportedFileResultSchema]
+
+
+# --- Teams Collaboration (Discuss with Group v2) ---
+
+
+class ResolvedParticipantSchema(BaseModel):
+    display_name: str
+    user_id: str | None
+    email: str | None
+    role: str
+    source: str
+    resolved: bool
+
+
+class MatchedChatSchema(BaseModel):
+    chat_id: str
+    topic: str | None
+    member_names: list[str]
+    member_ids: list[str] = Field(default_factory=list)
+    match_kind: str
+
+
+class FindTeamsGroupRequest(BaseModel):
+    meeting_id: str
+
+
+class FindTeamsGroupResponse(BaseModel):
+    teams_available: bool
+    unavailable_reason: str | None = None
+    participants: list[ResolvedParticipantSchema]
+    existing_group: MatchedChatSchema | None = None
+    application_group_id: str | None = None
+
+
+class CreateTeamsGroupRequest(BaseModel):
+    confirmed: Literal[True]
+    meeting_id: str
+    participant_user_ids: list[str] = Field(min_length=1)
+    topic: str
+
+
+class CreateTeamsGroupResponse(BaseModel):
+    application_group_id: str
+    teams_chat_id: str
+    topic: str
+    member_names: list[str]
+    member_ids: list[str] = Field(default_factory=list)
+
+
+class SendTeamsDiscussionRequest(BaseModel):
+    recipient_user_ids: list[str]
+    confirmed: Literal[True]
+    message_id: str
+    meeting_id: str
+    group_id: str
+    topic: str
+    summary: str
+    question: str
+    evidence_speaker: str | None = None
+    evidence_timestamp: str | None = None
+    evidence_excerpt: str | None = None
+    evidence_source_file: str | None = None
+    evidence_location: str | None = None
+
+
+class SendTeamsDiscussionResponse(BaseModel):
+    discussion_id: str
+    message_id: str
+    teams_chat_id: str

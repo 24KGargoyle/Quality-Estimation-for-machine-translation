@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import RequireAuth from "@/components/RequireAuth";
+import IntelligencePanel from "@/components/IntelligencePanel";
+import { IntelligencePanel as IntelligenceData } from "@/lib/types";
 import ChatMessage from "@/components/ChatMessage";
 import { api, ApiError } from "@/lib/api";
 import { ChatResponse, ConversationDetail, MeetingDetail, MessageSchema } from "@/lib/types";
@@ -23,6 +25,7 @@ function MeetingWorkspace() {
     searchParams.get("conversation")
   );
   const [messages, setMessages] = useState<MessageSchema[]>([]);
+  const [intelligence, setIntelligence] = useState<IntelligenceData | null>(null);
   const [input, setInput] = useState("");
   const [documentId, setDocumentId] = useState("");
   const [sending, setSending] = useState(false);
@@ -65,6 +68,7 @@ function MeetingWorkspace() {
         conversation_id: conversationId,
         message: question,
       });
+      setIntelligence(res.intelligence);
       setConversationId(res.conversation_id);
       if (res.cross_meeting) {
         setNotice("This answer draws on multiple meetings you're authorized to see, because you asked to compare/search across meetings.");
@@ -83,7 +87,7 @@ function MeetingWorkspace() {
   }
 
   return (
-    <div className="mx-auto flex max-w-4xl flex-col gap-6 px-4 py-6">
+    <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6">
       <div className="rounded-xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
         <div className="flex items-center gap-2">
           <h1 className="text-lg font-semibold">{meeting.title}</h1>
@@ -138,15 +142,16 @@ function MeetingWorkspace() {
         )}
       </div>
 
-      <div className="flex min-h-[400px] flex-col rounded-xl border border-neutral-200 bg-neutral-50/60 dark:border-neutral-800 dark:bg-neutral-900/40">
+      <div className="flex flex-col items-start gap-6 lg:flex-row">
+      <div className="w-full min-w-0 flex min-h-[400px] flex-col rounded-xl border border-neutral-200 bg-neutral-50/60 dark:border-neutral-800 dark:bg-neutral-900/40">
         <div className="flex-1 space-y-4 overflow-y-auto p-4">
           {messages.length === 0 && (
             <p className="text-center text-sm text-neutral-400">
               Ask about this meeting — e.g. &ldquo;What did Chetan say about CrewAI?&rdquo;
             </p>
           )}
-          {messages.map((m) => (
-            <ChatMessage key={m.id} message={m} />
+          {messages.map((m, index) => (
+            <ChatMessage key={m.id} message={m} meetingId={meetingId} question={messages[index - 1]?.content ?? ""} />
           ))}
           <div ref={bottomRef} />
         </div>
@@ -155,12 +160,13 @@ function MeetingWorkspace() {
         {error && <p className="px-4 pb-1 text-xs text-red-600">{error}</p>}
         {meeting.documents.length > 0 && (
           <div className="px-4 pb-3">
-            <label htmlFor="question-document" className="mb-1 block text-sm">Answer from</label>
+            <label htmlFor="question-document" className="mb-1 block text-sm">Choose File to progress</label>
             <select
               id="question-document"
               value={documentId}
               disabled={sending}
               onChange={(e) => {
+                setIntelligence(null);
                 setDocumentId(e.target.value);
                 setConversationId(null);
                 setMessages([]);
@@ -199,6 +205,8 @@ function MeetingWorkspace() {
             {sending ? "Thinking…" : "Send"}
           </button>
         </form>
+      </div>
+      <IntelligencePanel data={intelligence} />
       </div>
     </div>
   );

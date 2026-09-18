@@ -26,9 +26,9 @@ def is_cross_meeting_query(query: str) -> bool:
 
 def extract_speaker_filter(query: str, participant_names: list[str]) -> str | None:
     q = query.lower()
-    for name in sorted({n for n in participant_names if n}, key=len, reverse=True):
-        # match on first name or full name to catch "What did Chetan say..."
-        parts = name.lower().split()
-        if name.lower() in q or (parts and parts[0] in q.split()):
-            return name
-    return None
+    names = sorted({n for n in participant_names if n})
+    full = [name for name in names if re.search(rf"\b{re.escape(name.lower())}\b", q)]
+    if full:
+        return full[0] if len(full) == 1 else None
+    partial = [name for name in names if re.search(rf"\b{re.escape(name.split()[0].lower())}\b", q)]
+    return partial[0] if len(partial) == 1 else None

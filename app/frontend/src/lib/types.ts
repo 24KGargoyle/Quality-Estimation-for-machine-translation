@@ -43,8 +43,8 @@ export interface MeetingDetail extends MeetingSummary {
 
 export interface SourceSchema {
   speaker: string | null;
-  start_timestamp: string;
-  end_timestamp: string;
+  start_timestamp: string | null;
+  end_timestamp: string | null;
   excerpt: string;
   source: string;
   source_file: string | null;
@@ -56,6 +56,34 @@ export interface SourceSchema {
   section: string | null;
 }
 
+export interface RelatedDocument {
+  source_file: string;
+  document_type: string;
+  file_type: string;
+  location: string | null;
+}
+
+export interface WebResult {
+  title: string;
+  snippet: string;
+  url: string;
+}
+
+export interface WebResearch {
+  configured: boolean;
+  query: string;
+  results: WebResult[];
+  note: string | null;
+}
+
+export interface IntelligencePanel {
+  related_topics: string[];
+  related_documents: RelatedDocument[];
+  related_people: string[];
+  ideas: string[];
+  web_research: WebResearch | null;
+}
+
 export interface ChatResponse {
   conversation_id: string;
   message_id: string;
@@ -64,6 +92,7 @@ export interface ChatResponse {
   cross_meeting: boolean;
   speaker_filter: string | null;
   sources: SourceSchema[];
+  intelligence: IntelligencePanel | null;
 }
 
 export interface MessageSchema {
@@ -182,4 +211,43 @@ export interface SuggestedDecision {
   detected: boolean;
   decision_text: string | null;
   action_items: { task: string; owner: string }[];
+}
+
+export interface ResolvedParticipant {
+  display_name: string;
+  user_id: string | null;
+  email: string | null;
+  role: string;
+  source: string;
+  resolved: boolean;
+}
+
+export interface MatchedChat {
+  chat_id: string;
+  topic: string | null;
+  member_names: string[];
+  member_ids: string[];
+  match_kind: "exact" | "created";
+}
+
+export interface FindTeamsGroupResponse {
+  teams_available: boolean;
+  unavailable_reason: string | null;
+  participants: ResolvedParticipant[];
+  existing_group: MatchedChat | null;
+  application_group_id: string | null;
+}
+
+export interface CreateTeamsGroupResponse {
+  application_group_id: string;
+  teams_chat_id: string;
+  topic: string;
+  member_names: string[];
+  member_ids: string[];
+}
+
+export interface SendTeamsDiscussionResponse {
+  discussion_id: string;
+  message_id: string;
+  teams_chat_id: string;
 }
