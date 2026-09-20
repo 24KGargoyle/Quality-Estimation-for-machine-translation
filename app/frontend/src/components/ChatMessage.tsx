@@ -50,7 +50,7 @@ export default function ChatMessage({ message, meetingId, question = "" }: { mes
   if (isUser) {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[75%] rounded-2xl rounded-br-sm bg-neutral-900 px-4 py-2.5 text-sm text-white dark:bg-white dark:text-neutral-900">
+        <div className="message-user px-4 py-3 text-sm">
           {message.content}
         </div>
       </div>
@@ -59,19 +59,19 @@ export default function ChatMessage({ message, meetingId, question = "" }: { mes
 
   return (
     <div className="flex justify-start">
-      <div className="max-w-[80%] rounded-2xl rounded-bl-sm border border-neutral-200 bg-white px-4 py-3 text-sm dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="message-assistant text-sm">
         <p className="whitespace-pre-wrap">{message.content}</p>
 
         {message.sources.length > 0 && (
-          <details className="mt-3 border-t border-neutral-100 pt-2 dark:border-neutral-800">
-            <summary className="cursor-pointer rounded text-xs font-medium text-neutral-600 focus-visible:outline-2 focus-visible:outline-offset-4 dark:text-neutral-300">
+          <details className="mt-3 border-t border-neutral-100 pt-2">
+            <summary className="cursor-pointer rounded text-xs font-medium text-neutral-600 focus-visible:outline-2 focus-visible:outline-offset-4">
               View references ({message.sources.length})
             </summary>
             <div className="mt-2 space-y-2">
             {message.sources.map((s, i) => (
-              <div key={i} className="rounded-md bg-neutral-50 px-2.5 py-1.5 text-xs dark:bg-neutral-800/60">
-                <div className="font-medium text-neutral-600 dark:text-neutral-300">{sourceLabel(s)}</div>
-                <div className="mt-0.5 text-neutral-500 dark:text-neutral-400">&ldquo;{s.excerpt}&rdquo;</div>
+              <div key={i} className="rounded-md bg-neutral-50 px-2.5 py-1.5 text-xs">
+                <div className="font-medium text-neutral-600">{sourceLabel(s)}</div>
+                <div className="mt-0.5 text-neutral-500">&ldquo;{s.excerpt}&rdquo;</div>
               </div>
             ))}
             </div>
@@ -81,17 +81,17 @@ export default function ChatMessage({ message, meetingId, question = "" }: { mes
         <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-neutral-500">
           <button
             onClick={() => submitFeedback("up")}
-            className={`rounded px-1.5 py-0.5 hover:bg-neutral-100 dark:hover:bg-neutral-800 ${rating === "up" ? "text-green-600" : ""}`}
+            className={`rounded px-1.5 py-0.5 hover:bg-neutral-100 ${rating === "up" ? "text-green-600" : ""}`}
           >
             👍 Helpful
           </button>
           <button
             onClick={() => setShowReasons((v) => !v)}
-            className={`rounded px-1.5 py-0.5 hover:bg-neutral-100 dark:hover:bg-neutral-800 ${rating === "down" ? "text-red-600" : ""}`}
+            className={`rounded px-1.5 py-0.5 hover:bg-neutral-100 ${rating === "down" ? "text-red-600" : ""}`}
           >
             👎 Not helpful
           </button>
-          <button onClick={() => setShowShare(true)} className="rounded px-1.5 py-0.5 hover:bg-neutral-100 dark:hover:bg-neutral-800">
+          <button onClick={() => setShowShare(true)} className="rounded px-1.5 py-0.5 hover:bg-neutral-100">
             💬 Discuss with Group
           </button>
         </div>
@@ -104,7 +104,7 @@ export default function ChatMessage({ message, meetingId, question = "" }: { mes
               <button
                 key={r.value}
                 onClick={() => submitFeedback("down", r.value)}
-                className="rounded-full border border-neutral-200 px-2 py-0.5 text-[11px] hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
+                className="rounded-full border border-neutral-200 px-2 py-0.5 text-[11px] hover:bg-neutral-100"
               >
                 {r.label}
               </button>

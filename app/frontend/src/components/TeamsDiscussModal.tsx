@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Dialog from "./Dialog";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import {
@@ -131,15 +132,15 @@ export default function TeamsDiscussModal({
   const unresolvedParticipants = (find?.participants ?? []).filter((p) => !p.resolved);
 
   return (
-    <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/40 px-4">
-      <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-lg dark:bg-neutral-900">
+    <Dialog label="Discuss in Microsoft Teams" onClose={onClose}>
+      <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-lg">
         <h3 className="text-sm font-semibold">Discuss with Group (Microsoft Teams)</h3>
 
         {step === "loading" && <p className="mt-3 text-xs text-neutral-500">Looking up meeting participants…</p>}
 
         {step === "unavailable" && (
           <div className="mt-3 space-y-3">
-            <p className="text-xs text-amber-600 dark:text-amber-400">{find?.unavailable_reason}</p>
+            <p className="text-xs text-amber-600">{find?.unavailable_reason}</p>
             {find && find.participants.length > 0 && (
               <div>
                 <div className="text-xs font-medium text-neutral-500">Meeting participants (unresolved)</div>
@@ -162,7 +163,7 @@ export default function TeamsDiscussModal({
               <div className="text-xs font-medium text-neutral-500">Members</div>
               <ul className="mt-1 flex flex-wrap gap-1.5">
                 {find.existing_group.member_names.map((n) => (
-                  <li key={n} className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs dark:bg-neutral-800">
+                  <li key={n} className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs">
                     {n}
                   </li>
                 ))}
@@ -171,14 +172,14 @@ export default function TeamsDiscussModal({
             <div className="flex gap-2">
               <button
                 onClick={() => find.application_group_id && router.push(`/groups/${find.application_group_id}`)}
-                className="flex-1 rounded-md border border-neutral-300 px-3 py-1.5 text-xs hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
+                className="flex-1 rounded-md border border-neutral-300 px-3 py-1.5 text-xs hover:bg-neutral-50"
               >
                 Open Group
               </button>
               <button
                 onClick={() => find.application_group_id && sendDiscussion(find.application_group_id)}
                 disabled={busy || !find.application_group_id}
-                className="flex-1 rounded-md bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50 dark:bg-white dark:text-neutral-900"
+                className="flex-1 rounded-md bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
               >
                 {busy ? "Sending…" : "Send Discussion"}
               </button>
@@ -190,9 +191,10 @@ export default function TeamsDiscussModal({
           <div className="mt-3 space-y-3">
             <p className="text-xs text-neutral-500">No existing Teams group was found for the meeting participants.</p>
             <div>
-              <label className="mb-1 block text-xs font-medium text-neutral-500">Topic</label>
+              <label htmlFor="teams-topic" className="mb-1 block text-xs font-medium text-neutral-500">Topic</label>
               <input
-                className="w-full rounded-md border border-neutral-300 px-2 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-950"
+                className="w-full rounded-md border border-neutral-300 px-2 py-1.5 text-sm"
+                id="teams-topic"
                 value={topic}
                 onChange={(e) => setTopic(e.target.value)}
               />
@@ -223,7 +225,7 @@ export default function TeamsDiscussModal({
             <button
               onClick={() => setStep("confirm-create")}
               disabled={selected.size === 0}
-              className="w-full rounded-md bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50 dark:bg-white dark:text-neutral-900"
+              className="w-full rounded-md bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
             >
               Create Teams Group
             </button>
@@ -244,21 +246,21 @@ export default function TeamsDiscussModal({
             </div>
             <div>
               <div className="text-xs font-medium text-neutral-500">Message</div>
-              <pre className="mt-1 whitespace-pre-wrap rounded-md bg-neutral-50 p-2 text-xs dark:bg-neutral-800/60">
+              <pre className="mt-1 whitespace-pre-wrap rounded-md bg-neutral-50 p-2 text-xs">
                 {`Topic: ${topic}\n\nSummary: ${summary}\n\nDiscussion question: ${question}`}
               </pre>
             </div>
             <div className="flex gap-2">
               <button
                 onClick={() => setStep("create")}
-                className="flex-1 rounded-md border border-neutral-300 px-3 py-1.5 text-xs hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
+                className="flex-1 rounded-md border border-neutral-300 px-3 py-1.5 text-xs hover:bg-neutral-50"
               >
                 Back
               </button>
               <button
                 onClick={createAndSend}
                 disabled={busy}
-                className="flex-1 rounded-md bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50 dark:bg-white dark:text-neutral-900"
+                className="flex-1 rounded-md bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
               >
                 {busy ? "Creating…" : "Confirm creation"}
               </button>
@@ -268,11 +270,11 @@ export default function TeamsDiscussModal({
 
         {step === "sent" && (
           <div className="mt-3 space-y-3">
-            <p className="text-sm text-green-600 dark:text-green-400">Discussion sent to Microsoft Teams.</p>
+            <p className="text-sm text-green-600">Discussion sent to Microsoft Teams.</p>
             {sentGroupId && (
               <button
                 onClick={() => router.push(`/groups/${sentGroupId}`)}
-                className="w-full rounded-md bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white dark:bg-white dark:text-neutral-900"
+                className="w-full rounded-md bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white"
               >
                 Open Group
               </button>
@@ -287,6 +289,6 @@ export default function TeamsDiscussModal({
           Close
         </button>
       </div>
-    </div>
+    </Dialog>
   );
 }

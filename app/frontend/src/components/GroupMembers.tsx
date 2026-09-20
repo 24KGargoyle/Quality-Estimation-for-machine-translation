@@ -43,7 +43,7 @@ export default function GroupMembers({ groupId }: { groupId: string }) {
   }
 
   return (
-    <section className="rounded-xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+    <section className="rounded-xl border border-neutral-200 bg-white p-4">
       <h3 className="text-sm font-semibold">Members{data ? ` (${data.members.length})` : ""}</h3>
       {!data && !error && <p className="mt-2 text-xs text-neutral-500">Loading members...</p>}
       <ul className="mt-2 max-h-64 space-y-3 overflow-auto text-sm">
@@ -60,9 +60,9 @@ export default function GroupMembers({ groupId }: { groupId: string }) {
           <input id="member-email" type="email" required maxLength={320} value={email}
             onChange={(event) => setEmail(event.target.value)} disabled={busy}
             placeholder="colleague@company.com"
-            className="w-full rounded-md border border-neutral-300 bg-white p-2 text-sm dark:border-neutral-700 dark:bg-neutral-950" />
+            className="w-full rounded-md border border-neutral-300 bg-white p-2 text-sm" />
           <p className="text-xs text-neutral-500">They must have signed in to the same organization. Added members can read existing group messages.</p>
-          <button disabled={busy || !email.trim()} className="w-full rounded-md bg-neutral-900 px-3 py-2 text-sm text-white disabled:opacity-50 dark:bg-white dark:text-neutral-900">
+          <button disabled={busy || !email.trim()} className="w-full rounded-md bg-neutral-900 px-3 py-2 text-sm text-white disabled:opacity-50">
             {busy ? "Adding..." : "Add member"}
           </button>
         </form>

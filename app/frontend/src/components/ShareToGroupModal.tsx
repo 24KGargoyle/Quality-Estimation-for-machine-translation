@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Dialog from "./Dialog";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import { GroupSummary } from "@/lib/types";
@@ -53,8 +54,8 @@ export default function ShareToGroupModal({
   }
 
   return (
-    <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/40 px-4">
-      <div className="w-full max-w-sm rounded-xl bg-white p-5 shadow-lg dark:bg-neutral-900">
+    <Dialog label="Discuss with Group" onClose={onClose}>
+      <div className="w-full max-w-sm rounded-xl bg-white p-5 shadow-lg">
         <h3 className="text-sm font-semibold">Discuss with Group</h3>
         <p className="mt-1 text-xs text-neutral-500">
           Select a group. Only the relevant context will be shared, with a link back to this meeting.
@@ -66,7 +67,7 @@ export default function ShareToGroupModal({
               key={g.id}
               onClick={() => share(g.id)}
               disabled={busyGroupId === g.id}
-              className="flex w-full items-center justify-between rounded-md border border-neutral-200 px-3 py-2 text-left text-sm hover:bg-neutral-50 disabled:opacity-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
+              className="flex w-full items-center justify-between rounded-md border border-neutral-200 px-3 py-2 text-left text-sm hover:bg-neutral-50 disabled:opacity-50"
             >
               <span>{g.name}</span>
               <span className="text-xs text-neutral-400">{g.member_count} members</span>
@@ -75,17 +76,17 @@ export default function ShareToGroupModal({
           {groups.length === 0 && <p className="text-xs text-neutral-400">No groups yet.</p>}
         </div>
 
-        <form onSubmit={createAndShare} className="mt-3 flex gap-2 border-t border-neutral-200 pt-3 dark:border-neutral-800">
+        <form onSubmit={createAndShare} className="mt-3 flex gap-2 border-t border-neutral-200 pt-3">
           <input
-            className="flex-1 rounded-md border border-neutral-300 px-2 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-950"
-            placeholder="Create new group…"
+            className="flex-1 rounded-md border border-neutral-300 px-2 py-1.5 text-sm"
+            aria-label="Create new group…" placeholder="Create new group…"
             value={newGroupName}
             onChange={(e) => setNewGroupName(e.target.value)}
           />
           <button
             type="submit"
             disabled={creating}
-            className="rounded-md bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50 dark:bg-white dark:text-neutral-900"
+            className="rounded-md bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
           >
             Create
           </button>
@@ -97,6 +98,6 @@ export default function ShareToGroupModal({
           Cancel
         </button>
       </div>
-    </div>
+    </Dialog>
   );
 }

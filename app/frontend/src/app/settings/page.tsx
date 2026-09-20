@@ -20,7 +20,7 @@ function SettingsContent() {
     <div className="mx-auto max-w-2xl px-4 py-8">
       <h1 className="text-xl font-semibold">Settings</h1>
 
-      <div className="mt-6 rounded-xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="mt-6 rounded-xl border border-neutral-200 bg-white p-5">
         <h2 className="text-sm font-semibold text-neutral-500">Account</h2>
         <dl className="mt-2 space-y-1 text-sm">
           <div className="flex justify-between"><dt className="text-neutral-400">Name</dt><dd>{user?.displayName}</dd></div>
@@ -29,13 +29,13 @@ function SettingsContent() {
         </dl>
         <button
           onClick={logout}
-          className="mt-4 rounded-md border border-neutral-300 px-3 py-1.5 text-xs hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
+          className="mt-4 rounded-md border border-neutral-300 px-3 py-1.5 text-xs hover:bg-neutral-50"
         >
           Sign out
         </button>
       </div>
 
-      <div className="mt-4 rounded-xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="mt-4 rounded-xl border border-neutral-200 bg-white p-5">
         <h2 className="text-sm font-semibold text-neutral-500">Platform status</h2>
         <dl className="mt-2 space-y-1 text-sm">
           <div className="flex justify-between">

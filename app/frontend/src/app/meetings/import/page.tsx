@@ -38,21 +38,21 @@ function detectCounts(files: File[]): Record<string, number> {
 
 function statusColor(status: string): string {
   const styles: Record<string, string> = {
-    success: "text-green-600 dark:text-green-400",
+    success: "text-green-600",
     duplicate: "text-neutral-500",
-    skipped: "text-amber-600 dark:text-amber-400",
-    failed: "text-red-600 dark:text-red-400",
+    skipped: "text-amber-600",
+    failed: "text-red-600",
   };
   return styles[status] || "text-neutral-500";
 }
 
 function jobStatusBadge(status: string): string {
   const styles: Record<string, string> = {
-    completed: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300",
-    completed_with_warnings: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
-    failed: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
-    processing: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
-    queued: "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300",
+    completed: "bg-green-100 text-green-700",
+    completed_with_warnings: "bg-amber-100 text-amber-700",
+    failed: "bg-red-100 text-red-700",
+    processing: "bg-blue-100 text-blue-700",
+    queued: "bg-neutral-100 text-neutral-600",
   };
   return styles[status] || styles.queued;
 }
@@ -159,18 +159,18 @@ function ImportContent() {
         everything in the same folder becomes one meeting.
       </p>
 
-      <div className="mt-6 rounded-xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="mt-6 rounded-xl border border-neutral-200 bg-white p-5">
         <input
           ref={folderInputRef}
           type="file"
           multiple
           disabled={busy || !!inProgress}
           onChange={handleSelectFolder}
-          className="block w-full text-sm text-neutral-600 file:mr-4 file:rounded-md file:border-0 file:bg-neutral-900 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-neutral-800 dark:text-neutral-300 dark:file:bg-white dark:file:text-neutral-900"
+          className="block w-full text-sm text-neutral-600 file:mr-4 file:rounded-md file:border-0 file:bg-neutral-900 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-neutral-800"
         />
 
         {files.length > 0 && (
-          <div className="mt-4 rounded-lg border border-neutral-200 p-3 text-sm dark:border-neutral-800">
+          <div className="mt-4 rounded-lg border border-neutral-200 p-3 text-sm">
             <div className="font-medium">Files detected: {files.length}</div>
             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-neutral-500">
               {Object.entries(counts).map(([type, count]) => (
@@ -181,7 +181,7 @@ function ImportContent() {
             </div>
             <p className="mt-3">Ready to import: {importableFiles.length}. Skipped before upload: {skippedFiles.length}.</p>
             {skippedFiles.length > 0 && (
-              <details className="mt-2 text-amber-700 dark:text-amber-400">
+              <details className="mt-2 text-amber-700">
                 <summary className="cursor-pointer">View skipped files</summary>
                 <ul className="mt-2 max-h-48 overflow-auto space-y-1 break-all">
                   {skippedFiles.map((file, index) => (
@@ -196,26 +196,26 @@ function ImportContent() {
           </div>
         )}
 
-        {error && <p className="mt-3 text-xs text-red-600 dark:text-red-400">{error}</p>}
+        {error && <p className="mt-3 text-xs text-red-600">{error}</p>}
 
         <button
           onClick={handleUpload}
           disabled={importableFiles.length === 0 || busy || !!inProgress}
-          className="mt-4 rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-50 dark:bg-white dark:text-neutral-900"
+          className="mt-4 ml-auto block rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-50"
         >
           {busy || inProgress ? "Processing…" : "Upload & Process"}
         </button>
       </div>
 
       {job && (
-        <div className="mt-6 rounded-xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+        <div className="mt-6 rounded-xl border border-neutral-200 bg-white p-5">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold">
               {inProgress ? "Processing" : "Import completed"}
             </h2>
             <span className={`rounded-full px-2 py-0.5 text-xs ${jobStatusBadge(job.status)}`}>{job.status}</span>
           </div>
-          <div className="mt-2 text-sm text-neutral-600 dark:text-neutral-300">
+          <div className="mt-2 text-sm text-neutral-600">
             {inProgress
               ? `Processing: ${job.processed_files} / ${job.total_files}`
               : `Total: ${job.total_files}`}
@@ -243,7 +243,7 @@ function ImportContent() {
                 </thead>
                 <tbody>
                   {results.map((r, i) => (
-                    <tr key={i} className="border-t border-neutral-100 dark:border-neutral-800">
+                    <tr key={i} className="border-t border-neutral-100">
                       <td className="py-1.5 pr-3">{r.relative_path}</td>
                       <td className="py-1.5 pr-3">{r.file_type}</td>
                       <td className={`py-1.5 pr-3 font-medium ${statusColor(r.status)}`}>{r.status}</td>
@@ -262,7 +262,7 @@ function ImportContent() {
         <h2 className="text-sm font-semibold text-neutral-500">Import History</h2>
         <div className="mt-2 space-y-2">
           {history.map((h) => (
-            <div key={h.id} className="rounded-lg border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
+            <div key={h.id} className="rounded-lg border border-neutral-200 bg-white">
               <button
                 onClick={() => toggleHistoryDetail(h.id)}
                 className="flex w-full items-center justify-between px-4 py-3 text-left"
@@ -279,7 +279,7 @@ function ImportContent() {
                 <span className={`rounded-full px-2 py-0.5 text-xs ${jobStatusBadge(h.status)}`}>{h.status}</span>
               </button>
               {expandedJob === h.id && historyResults[h.id] && (
-                <div className="border-t border-neutral-100 px-4 py-3 dark:border-neutral-800">
+                <div className="overflow-x-auto border-t border-neutral-100 px-4 py-3">
                   <table className="w-full text-left text-xs">
                     <thead className="text-neutral-400">
                       <tr>
@@ -290,7 +290,7 @@ function ImportContent() {
                     </thead>
                     <tbody>
                       {historyResults[h.id].map((r, i) => (
-                        <tr key={i} className="border-t border-neutral-100 dark:border-neutral-800">
+                        <tr key={i} className="border-t border-neutral-100">
                           <td className="py-1.5 pr-3">{r.relative_path}</td>
                           <td className={`py-1.5 pr-3 font-medium ${statusColor(r.status)}`}>{r.status}</td>
                           <td className="py-1.5 text-neutral-500">{r.reason || "—"}</td>

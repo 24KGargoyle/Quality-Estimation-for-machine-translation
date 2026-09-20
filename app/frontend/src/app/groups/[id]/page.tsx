@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import RequireAuth from "@/components/RequireAuth";
+import Conversation, { ConversationHandle } from "@/components/Conversation";
 import GroupMembers from "@/components/GroupMembers";
 import { useAuth } from "@/lib/auth";
 import { api, wsBase } from "@/lib/api";
@@ -19,11 +20,12 @@ function GroupWorkspace() {
   const [input, setInput] = useState("");
   const [askAi, setAskAi] = useState(false);
   const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [suggestion, setSuggestion] = useState<SuggestedDecision | null>(null);
   const [decisions, setDecisions] = useState<DecisionSchema[]>([]);
   const [actionItems, setActionItems] = useState<ActionItemSchema[]>([]);
   const [editableDecision, setEditableDecision] = useState("");
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const conversationRef = useRef<ConversationHandle>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
   function refreshMessages() {
@@ -56,19 +58,21 @@ function GroupWorkspace() {
     return () => ws.close();
   }, [groupId]);
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
 
   async function handleSend(e: React.FormEvent) {
     e.preventDefault();
-    if (!input.trim()) return;
+    if (!input.trim() || sending) return;
+    conversationRef.current?.followLatest();
+    setError(null);
     setSending(true);
     const content = input;
     setInput("");
     try {
       await api.post(`/api/groups/${groupId}/messages`, { content, ask_ai: askAi });
       refreshMessages();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not send your message.");
+      setInput(content);
     } finally {
       setSending(false);
     }
@@ -92,9 +96,10 @@ function GroupWorkspace() {
   }
 
   return (
-    <div className="mx-auto grid max-w-5xl gap-6 px-4 py-6 lg:grid-cols-[1fr_280px]">
-      <div className="flex min-h-[500px] flex-col rounded-xl border border-neutral-200 bg-neutral-50/60 dark:border-neutral-800 dark:bg-neutral-900/40">
-        <div className="flex-1 space-y-3 overflow-y-auto p-4">
+    <div className="group-workspace mx-auto grid max-w-7xl gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
+      <div className="chat-panel flex flex-col rounded-xl border border-neutral-200">
+        <Conversation ref={conversationRef} label="Group conversation">
+          {messages.length === 0 && <p className="chat-empty"><strong>Bring everyone into the conversation.</strong>Share a message with your group to get started.</p>}
           {messages.map((m) => {
             const isMe = m.sender_user_id === user?.userId;
             const isAi = !m.sender_user_id;
@@ -103,10 +108,10 @@ function GroupWorkspace() {
                 <div
                   className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm ${
                     isMe
-                      ? "rounded-br-sm bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
+                      ? "rounded-br-sm border border-blue-100 bg-blue-50 text-neutral-900"
                       : isAi
-                      ? "rounded-bl-sm border border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950/40"
-                      : "rounded-bl-sm border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900"
+                      ? "rounded-bl-sm border border-blue-200 bg-blue-50"
+                      : "rounded-bl-sm border border-neutral-200 bg-white"
                   }`}
                 >
                   {!isMe && <div className="mb-0.5 text-xs font-semibold text-neutral-500">{m.sender_name}</div>}
@@ -115,17 +120,21 @@ function GroupWorkspace() {
               </div>
             );
           })}
-          <div ref={bottomRef} />
-        </div>
+          {sending && <p role="status" className="text-xs text-neutral-500">Sending message?</p>}
+        </Conversation>
 
-        <form onSubmit={handleSend} className="flex flex-col gap-2 border-t border-neutral-200 p-3 dark:border-neutral-800">
+        {error && <p role="alert" className="px-4 py-2 text-sm text-red-600">{error}</p>}
+        <form onSubmit={handleSend} className="chat-composer flex flex-col gap-2 border-t border-neutral-200">
           <label className="flex items-center gap-2 text-xs text-neutral-500">
             <input type="checkbox" checked={askAi} onChange={(e) => setAskAi(e.target.checked)} />
-            Ask Meeting Copilot to weigh in on this message
+            Get an AI response
           </label>
-          <div className="flex gap-2">
-            <input
-              className="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950"
+          <div className="flex w-full gap-2">
+            <textarea
+              aria-label="Message the group"
+              rows={1}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); e.currentTarget.form?.requestSubmit(); } }}
+              className="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-sm"
               placeholder="Message the group…"
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -134,7 +143,7 @@ function GroupWorkspace() {
             <button
               type="submit"
               disabled={sending || !input.trim()}
-              className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-neutral-900"
+              className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
             >
               Send
             </button>
@@ -145,11 +154,11 @@ function GroupWorkspace() {
       <aside className="space-y-4">
         <GroupMembers key={groupId} groupId={groupId} />
         {discussionId && (
-          <div className="rounded-xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+          <div className="rounded-xl border border-neutral-200 bg-white p-4">
             <h3 className="text-sm font-semibold">Decision detection</h3>
             <button
               onClick={checkForDecision}
-              className="mt-2 w-full rounded-md border border-neutral-300 px-3 py-1.5 text-xs hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
+              className="mt-2 w-full rounded-md border border-neutral-300 px-3 py-1.5 text-xs hover:bg-neutral-50"
             >
               Check for a decision
             </button>
@@ -157,10 +166,10 @@ function GroupWorkspace() {
               <p className="mt-2 text-xs text-neutral-400">No clear decision detected yet.</p>
             )}
             {suggestion?.detected && (
-              <div className="mt-3 rounded-md bg-amber-50 p-3 text-xs dark:bg-amber-950/30">
-                <p className="font-medium text-amber-700 dark:text-amber-400">Potential decision detected</p>
+              <div className="mt-3 rounded-md bg-amber-50 p-3 text-xs">
+                <p className="font-medium text-amber-700">Potential decision detected</p>
                 <textarea
-                  className="mt-2 w-full rounded border border-amber-200 bg-white px-2 py-1 text-xs dark:border-amber-900 dark:bg-neutral-950"
+                  className="mt-2 w-full rounded border border-amber-200 bg-white px-2 py-1 text-xs"
                   value={editableDecision}
                   onChange={(e) => setEditableDecision(e.target.value)}
                 />
@@ -175,11 +184,11 @@ function GroupWorkspace() {
           </div>
         )}
 
-        <div className="rounded-xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+        <div className="rounded-xl border border-neutral-200 bg-white p-4">
           <h3 className="text-sm font-semibold">Decisions</h3>
           <div className="mt-2 space-y-2">
             {decisions.map((d) => (
-              <div key={d.id} className="rounded-md bg-neutral-50 p-2 text-xs dark:bg-neutral-800/60">
+              <div key={d.id} className="rounded-md bg-neutral-50 p-2 text-xs">
                 {d.decision_text}
               </div>
             ))}
@@ -187,11 +196,11 @@ function GroupWorkspace() {
           </div>
         </div>
 
-        <div className="rounded-xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+        <div className="rounded-xl border border-neutral-200 bg-white p-4">
           <h3 className="text-sm font-semibold">Action items</h3>
           <div className="mt-2 space-y-2">
             {actionItems.map((a) => (
-              <div key={a.id} className="rounded-md bg-neutral-50 p-2 text-xs dark:bg-neutral-800/60">
+              <div key={a.id} className="rounded-md bg-neutral-50 p-2 text-xs">
                 <div>{a.task}</div>
                 <div className="mt-0.5 text-neutral-400">
                   Owner: {a.owner_name || "Unassigned"} · {a.status}

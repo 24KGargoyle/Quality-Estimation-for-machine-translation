@@ -15,7 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Meeting Copilot",
+  title: "Meeting Assistant | Everforth Quinnox",
+  icons: { icon: "/brand/everforth-quinnox-icon.png", apple: "/brand/everforth-quinnox-icon.png" },
   description: "Agentic Microsoft Teams Meeting Intelligence & Collaboration Platform",
 };
 
@@ -25,10 +26,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-neutral-50 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
+      <body className="min-h-full flex flex-col bg-neutral-50 text-neutral-900">
         <AuthProvider>
           <NavBar />
-          <main className="flex-1">{children}</main>
+          <main id="main-content" className="app-main flex-1" tabIndex={-1}>{children}</main>
         </AuthProvider>
       </body>
     </html>

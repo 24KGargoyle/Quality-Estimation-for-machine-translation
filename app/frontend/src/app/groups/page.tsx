@@ -10,6 +10,7 @@ function GroupsContent() {
   const [groups, setGroups] = useState<GroupSummary[]>([]);
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   function refresh() {
     api.get<GroupSummary[]>("/api/groups").then(setGroups).catch(() => {});
@@ -20,11 +21,14 @@ function GroupsContent() {
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) return;
+    setError(null);
     setBusy(true);
     try {
       await api.post("/api/groups", { name });
       setName("");
       refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Request failed. Please try again.");
     } finally {
       setBusy(false);
     }
@@ -39,26 +43,27 @@ function GroupsContent() {
 
       <form onSubmit={handleCreate} className="mt-6 flex gap-2">
         <input
-          className="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950"
-          placeholder="New group name…"
+          className="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-sm"
+          aria-label="New group name…" placeholder="New group name…"
           value={name}
           onChange={(e) => setName(e.target.value)}
         />
         <button
           type="submit"
           disabled={busy}
-          className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-neutral-900"
+          className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
         >
           Create
         </button>
       </form>
+      {error && <p role="alert" className="mt-3 text-sm text-red-600">{error}</p>}
 
       <div className="mt-6 space-y-2">
         {groups.map((g) => (
           <Link
             key={g.id}
             href={`/groups/${g.id}`}
-            className="flex items-center justify-between rounded-lg border border-neutral-200 bg-white px-4 py-3 hover:border-neutral-300 dark:border-neutral-800 dark:bg-neutral-900"
+            className="flex items-center justify-between rounded-lg border border-neutral-200 bg-white px-4 py-3 hover:border-neutral-300"
           >
             <span className="text-sm font-medium">{g.name}</span>
             <span className="text-xs text-neutral-400">{g.member_count} members</span>

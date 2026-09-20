@@ -31,7 +31,7 @@ export function highlightEvidence(text: string, terms: string[]): React.ReactNod
 
   return parts.map((part, i) =>
     unique.some((t) => t.toLowerCase() === part.toLowerCase()) ? (
-      <mark key={i} className="rounded bg-amber-200/70 px-0.5 dark:bg-amber-500/30">
+      <mark key={i} className="rounded bg-amber-200/70 px-0.5">
         {part}
       </mark>
     ) : (
