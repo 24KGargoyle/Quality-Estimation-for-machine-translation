@@ -8,9 +8,9 @@ import { api, ApiError } from "@/lib/api";
 export default function LoginPage() {
   const { devLogin } = useAuth();
   const [provider, setProvider] = useState<string>("dev");
-  const [email, setEmail] = useState("santhosh@acme.com");
-  const [displayName, setDisplayName] = useState("Santhosh");
-  const [tenantName, setTenantName] = useState("Acme Corp");
+  const [email, setEmail] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [tenantName, setTenantName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [entraError, setEntraError] = useState<string | null>(null);
