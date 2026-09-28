@@ -82,6 +82,12 @@ async def resolve_meeting(
     # it, tripping the same unique constraint the lock is meant to prevent.
     async with _tenant_locks[tenant_id]:
         if explicit_meeting_id:
+            from fastapi import HTTPException
+            target = (await db.execute(select(Meeting).where(
+                Meeting.tenant_id == tenant_id, Meeting.ms_meeting_id == explicit_meeting_id,
+            ))).scalar_one_or_none()
+            if target is not None and target.organizer_id != organizer_id:
+                raise HTTPException(403, "Import into another user's meeting is not permitted")
             meeting = await get_or_create_meeting(
                 db, tenant_id=tenant_id, ms_meeting_id=explicit_meeting_id,
                 title=explicit_title or explicit_meeting_id, organizer_id=organizer_id,
@@ -94,13 +100,14 @@ async def resolve_meeting(
 
         existing = (
             await db.execute(
-                select(Meeting).where(Meeting.tenant_id == tenant_id, func.lower(Meeting.title) == title.lower())
+                select(Meeting).where(Meeting.tenant_id == tenant_id, Meeting.organizer_id == organizer_id,
+                                      Meeting.is_historical.is_(True), func.lower(Meeting.title) == title.lower())
             )
         ).scalars().first()
         if existing is not None:
             return existing, False
 
-        historical_id = deterministic_historical_id(tenant_id=tenant_id, key=key)
+        historical_id = deterministic_historical_id(tenant_id=tenant_id, key=f"{organizer_id}:{key}")
         meeting = await get_or_create_meeting(
             db, tenant_id=tenant_id, ms_meeting_id=historical_id, title=title, organizer_id=organizer_id
         )

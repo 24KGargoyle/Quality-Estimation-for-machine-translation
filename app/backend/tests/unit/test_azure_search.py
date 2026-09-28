@@ -97,7 +97,7 @@ async def test_ensure_index_sends_expected_schema_and_vector_dimensions(monkeypa
     assert call["method"] == "PUT"
     field_names = {f["name"] for f in call["json"]["fields"]}
     assert field_names == {
-        "id", "tenant_id", "meeting_id", "meeting_join_id", "meeting_title", "meeting_date",
+        "id", "tenant_id", "customer_id", "meeting_id", "meeting_join_id", "meeting_title", "meeting_date",
         "speaker_id", "speaker_name", "start_time", "end_time", "content", "content_type",
         "chunk_index", "source", "document_id", "embedding",
         "source_file", "relative_path", "file_type", "document_type",
@@ -221,3 +221,17 @@ async def test_request_failure_is_surfaced_as_not_configured_error(monkeypatch):
 
     with pytest.raises(SearchNotConfiguredError):
         await provider.keyword_search(tenant_id="t1", meeting_ids=["m1"], query="ship", top_k=5)
+
+async def test_delete_document_scopes_and_checks_results(monkeypatch):
+    provider = _configured_provider(monkeypatch)
+    calls = []
+    async def request(method, path, json_body=None):
+        calls.append(json_body)
+        if path == '/docs/search':
+            return {'value': [{'id': 'chunk'}]}
+        return {'value': [{'key': 'chunk', 'status': False}]}
+    monkeypatch.setattr(provider, '_request', request)
+    with pytest.raises(RuntimeError, match='deletion failed'):
+        await provider.delete_document(tenant_id='tenant', meeting_id='meeting', document_id="hist:a'b")
+    assert calls[0]['filter'] == "tenant_id eq 'tenant' and meeting_id eq 'meeting' and document_id eq 'hist:a''b'"
+    assert calls[1]['value'] == [{'@search.action': 'delete', 'id': 'chunk'}]

@@ -31,6 +31,9 @@ class BlobStorageNotConfiguredError(RuntimeError):
 
 
 class BlobStorage(ABC):
+    async def delete(self, *, path: str) -> None:
+        raise NotImplementedError
+
     @abstractmethod
     async def save(self, *, path: str, content: bytes) -> str:
         """Persist `content` at `path` (already sanitized — see
@@ -39,6 +42,12 @@ class BlobStorage(ABC):
 
 
 class LocalBlobStorage(BlobStorage):
+    async def delete(self, *, path: str) -> None:
+        full = (self.root / path).resolve()
+        if self.root.resolve() not in full.parents:
+            raise ValueError("Resolved path escapes the storage root.")
+        full.unlink(missing_ok=True)
+
     def __init__(self, root: Path | None = None) -> None:
         settings = get_settings()
         self.root = root or Path(settings.local_blob_storage_dir)
@@ -53,6 +62,18 @@ class LocalBlobStorage(BlobStorage):
 
 
 class AzureBlobStorage(BlobStorage):
+    async def delete(self, *, path: str) -> None:
+        from urllib.parse import quote
+        sas_url = self.settings.azure_storage_container_sas_url
+        if not sas_url:
+            raise BlobStorageNotConfiguredError("Azure Blob Storage is not configured.")
+        base, _, query = sas_url.partition("?")
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.delete(f"{base.rstrip('/')}/{quote(path, safe='/')}?{query}",
+                                           headers={"x-ms-delete-snapshots": "include"})
+        if response.status_code != 404:
+            response.raise_for_status()
+
     def __init__(self) -> None:
         self.settings = get_settings()
 

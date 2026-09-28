@@ -27,3 +27,7 @@ app/frontend/.env
 *.log
 
 /qe_mbert_regression/
+app/backend/config/operational.json
+app/backend/config/datasets/
+.tools/
+app/backend/data/models/

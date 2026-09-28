@@ -17,7 +17,7 @@ from __future__ import annotations
 import asyncio
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from meeting_intel.api.schemas import ImportedFileResultSchema, ImportJobResults, ImportJobSummary
@@ -44,6 +44,67 @@ router = APIRouter(prefix="/api/historical-imports", tags=["historical-imports"]
 _background_jobs: set[asyncio.Task] = set()
 
 
+@router.delete("/{job_id}")
+async def delete_import_job(
+    job_id: str, ctx: RequestContext = Depends(get_current_context), db: AsyncSession = Depends(get_db),
+) -> dict:
+    from meeting_intel.db.models import HistoricalDocument, HistoricalImportJob, ImportJobStatus, Meeting, UserRole
+    from meeting_intel.retrieval.hybrid_search import get_search_provider
+    from meeting_intel.storage.blob_storage import get_blob_storage
+
+    job = await get_authorized_import_job(db, user=ctx.user, job_id=job_id)
+    if job.created_by != ctx.user.id and ctx.user.role != UserRole.admin:
+        raise HTTPException(403, "Only the uploader or a tenant administrator can delete this import.")
+    active = (await db.execute(select(HistoricalImportJob.id).where(
+        HistoricalImportJob.tenant_id == ctx.tenant_id,
+        HistoricalImportJob.status.in_([ImportJobStatus.queued, ImportJobStatus.processing]),
+    ))).first()
+    if active:
+        raise HTTPException(409, "Wait for running imports to finish before deleting.")
+    documents = (await db.execute(select(HistoricalDocument).where(
+        HistoricalDocument.tenant_id == ctx.tenant_id, HistoricalDocument.import_job_id == job.id,
+    ))).scalars().all()
+    try:
+        for document in documents:
+            if document.meeting_id:
+                await get_search_provider().delete_document(
+                    tenant_id=ctx.tenant_id, meeting_id=document.meeting_id,
+                    document_id=f"hist:{document.file_hash[:16]}",
+                )
+            if document.blob_path:
+                await get_blob_storage().delete(path=document.blob_path)
+    except Exception:
+        # Keep metadata/history so a failed external deletion can be retried.
+        raise HTTPException(503, "Could not finish deleting stored files or search entries. Please retry.") from None
+    for document in documents:
+        from meeting_intel.retrieval.local_index_cache import cache_path
+        cache_path(ctx.tenant_id, document.meeting_id, f'hist:{document.file_hash[:16]}').unlink(missing_ok=True)
+        await db.delete(document)
+    await db.flush()
+    for meeting_id in {document.meeting_id for document in documents if document.meeting_id}:
+        meeting = await db.get(Meeting, meeting_id)
+        if meeting and meeting.is_historical:
+            remaining_transcript = (await db.execute(select(HistoricalDocument.id).where(
+                HistoricalDocument.tenant_id == ctx.tenant_id,
+                HistoricalDocument.meeting_id == meeting_id,
+                HistoricalDocument.document_type == "transcript",
+            ))).first()
+            meeting.transcript_available = remaining_transcript is not None
+    await db.execute(delete(ImportedFileResult).where(ImportedFileResult.import_job_id == job.id))
+    await db.delete(job)
+    await audit(db, tenant_id=ctx.tenant_id, user_id=ctx.user.id, action="historical_import.delete",
+                resource_type="import_job", resource_id=job_id, request_id=ctx.request_id,
+                extra={"deleted_documents": len(documents)})
+    await db.commit()
+    return {"deleted_documents": len(documents)}
+
+
+@router.get('/capabilities')
+async def import_capabilities(ctx: RequestContext = Depends(get_current_context)) -> dict:
+    from meeting_intel.ingestion.capabilities import capabilities
+    return capabilities()
+
+
 def _launch(job_id: str, *, tenant_id: str, user_id: str, files: list[StagedFile]) -> None:
     task = asyncio.create_task(run_import_job(job_id, tenant_id=tenant_id, user_id=user_id, files=files))
     _background_jobs.add(task)
@@ -64,11 +125,13 @@ async def create_historical_import(
     staged: list[StagedFile] = []
     total_bytes = 0
     for f in files:
-        content = await f.read()
-        if len(content) > MAX_FILE_SIZE_BYTES:
+        from meeting_intel.ingestion.capabilities import file_limit
+        limit = file_limit(f.filename or '')
+        content = await f.read(limit + 1)
+        if len(content) > limit:
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST,
-                f"'{f.filename}' exceeds the {MAX_FILE_SIZE_BYTES // (1024 * 1024)} MB per-file limit",
+                f"'{f.filename}' exceeds the {limit // (1024 * 1024)} MB per-file limit",
             )
         total_bytes += len(content)
         if total_bytes > MAX_TOTAL_IMPORT_BYTES:
@@ -80,7 +143,20 @@ async def create_historical_import(
             filename = sanitize_filename(raw_path)
         except UnsafePathError as exc:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Unsafe file path '{raw_path}': {exc}") from exc
-        staged.append(StagedFile(filename=filename, relative_path=relative_path, content=content))
+        if filename.lower().endswith('.zip'):
+            from meeting_intel.ingestion.archives import expand_zip
+            try:
+                expanded = await asyncio.to_thread(expand_zip, content, relative_path)
+            except ValueError as exc:
+                raise HTTPException(400, str(exc)) from exc
+            if any(len(item.content) > file_limit(item.filename) for item in expanded):
+                raise HTTPException(400, 'An archived file exceeds its per-file limit.')
+            total_bytes += sum(len(item.content) for item in expanded)
+            staged.extend(expanded)
+        else:
+            staged.append(StagedFile(filename=filename, relative_path=relative_path, content=content))
+        if len(staged) > MAX_FILES_PER_IMPORT or total_bytes > MAX_TOTAL_IMPORT_BYTES:
+            raise HTTPException(400, 'Expanded import exceeds the file count or batch size limit.')
 
     job = await create_import_job(db, tenant_id=ctx.tenant_id, user_id=ctx.user.id, total_files=len(staged))
     await audit(

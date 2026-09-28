@@ -59,6 +59,7 @@ class IndexableChunk:
     sheet_name: str | None = None
     slide_number: int | None = None
     section: str | None = None
+    customer_id: str | None = None
 
 
 @dataclass
@@ -81,6 +82,7 @@ class SearchHit:
     sheet_name: str | None = None
     slide_number: int | None = None
     section: str | None = None
+    customer_id: str | None = None
 
     # Backward-compatible aliases matching the pre-refactor `TranscriptChunk`
     # ORM attribute names, so `agents/answer_agent.py`, `agents/discussion_agent.py`
@@ -107,6 +109,10 @@ class SearchNotConfiguredError(RuntimeError):
 
 
 class SearchProvider(ABC):
+    async def delete_document(self, *, tenant_id: str, meeting_id: str, document_id: str) -> None:
+        """Remove only the specified tenant-scoped document's chunks."""
+        raise NotImplementedError
+
     @abstractmethod
     async def index_chunks(self, chunks: list[IndexableChunk]) -> None:
         """Upsert (index or replace) a batch of chunks, all belonging to one meeting."""
@@ -116,7 +122,8 @@ class SearchProvider(ABC):
         """Remove every indexed chunk for a meeting (e.g. before re-indexing)."""
 
     @abstractmethod
-    async def chunks_for_meeting(self, *, tenant_id: str, meeting_id: str) -> list[SearchHit]:
+    async def chunks_for_meeting(self, *, tenant_id: str, meeting_id: str, customer_id: str | None = None,
+                                 document_ids: list[str] | None = None) -> list[SearchHit]:
         """All chunks for one meeting, in chunk_index order — powers the raw source browser."""
 
     @abstractmethod
@@ -140,6 +147,7 @@ class SearchProvider(ABC):
         speaker: str | None = None,
         top_k: int,
         document_id: str | None = None,
+        customer_id: str | None = None,
     ) -> list[SearchHit]:
         """Combined keyword + vector retrieval. `tenant_id` and `meeting_ids`
         are mandatory, enforced filters — never optional, never trusted from

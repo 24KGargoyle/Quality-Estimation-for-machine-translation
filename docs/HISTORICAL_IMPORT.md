@@ -233,3 +233,12 @@ for performance under load.
   now returns the new citation metadata (file type, page/sheet/slide/section) that a filter UI
   would need, and results already span every ingested document type in one query, but a dedicated
   filter-by-type/date control was not added to the Search page in this pass.
+
+### Deleting an import
+
+Use **Delete** on an Import History card and confirm to permanently remove that batch's originally imported files, search entries, and history. Only the uploader or a tenant administrator can delete it. Wait for active imports to finish first. Duplicate-only batches only remove their history; delete the original successful batch to remove the underlying files. Existing meetings and chats remain. Files can be uploaded again after deletion. A storage/search failure leaves the history available for retry; some files may already have been removed. This is not a purge of answers previously saved in chats.
+
+The Meetings library also offers **Delete** with confirmation. The organizer or a tenant administrator can remove a meeting, its transcript, imported files, and search entries. Saved chats and import history remain; Microsoft Teams meetings are unaffected.
+
+
+Duplicate detection is scoped to the uploader. Uploading identical files as a different user creates a separately owned workspace and processes those files independently. Repeated uploads by the same user are skipped. Existing legacy imports remain accessible to their original owners; previously skipped uploads should be uploaded again by the affected user. This does not grant access to other users' meetings.

@@ -75,4 +75,8 @@ async def health() -> dict:
         "graph_configured": settings.graph_configured,
         "llm_configured": settings.llm_configured,
         "auth_provider": settings.auth_provider,
+        "operational_enabled": settings.operational_enabled,
+        "operational_uploaded_evidence_enabled": settings.operational_uploaded_evidence_enabled,
+        "media_transcription_enabled": settings.media_transcription_enabled,
+        "office_conversion_configured": bool(settings.office_converter_path),
     }

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
-from sqlalchemy import select, func
+from sqlalchemy import select, func, delete, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,6 +14,33 @@ from meeting_intel.security.authz import audit, get_authorized_group
 from meeting_intel.security.jwt import InvalidTokenError, decode_session_token
 
 router = APIRouter(prefix="/api/groups", tags=["groups"])
+
+
+@router.delete("/{group_id}")
+async def delete_group(group_id: str, ctx: RequestContext = Depends(get_current_context),
+                       db: AsyncSession = Depends(get_db)) -> dict:
+    from meeting_intel.db.models import ActionItem, Decision, Discussion, TeamsMapping, AIResponse, AISource, Feedback
+    group = await get_authorized_group(db, user=ctx.user, group_id=group_id)
+    if group.created_by != ctx.user.id and ctx.user.role != UserRole.admin:
+        raise HTTPException(403, "Only the group creator or an administrator can delete this group")
+    messages = select(Message.id).where(Message.group_id == group_id)
+    responses = select(AIResponse.id).where(AIResponse.message_id.in_(messages))
+    decisions = select(Decision.id).where(Decision.group_id == group_id)
+    discussions = select(Discussion.id).where(Discussion.group_id == group_id)
+    await db.execute(update(Message).where(Message.shared_from_message_id.in_(messages)).values(shared_from_message_id=None))
+    await db.execute(update(Discussion).where(Discussion.shared_message_id.in_(messages)).values(shared_message_id=None))
+    await db.execute(update(ActionItem).where(ActionItem.decision_id.in_(decisions)).values(decision_id=None))
+    await db.execute(update(Decision).where(Decision.discussion_id.in_(discussions)).values(discussion_id=None))
+    await db.execute(delete(AISource).where(AISource.ai_response_id.in_(responses)))
+    await db.execute(delete(Feedback).where(Feedback.message_id.in_(messages)))
+    await db.execute(delete(AIResponse).where(AIResponse.message_id.in_(messages)))
+    for model in (ActionItem, Decision, Discussion, TeamsMapping, Message, GroupMember):
+        await db.execute(delete(model).where(model.group_id == group_id))
+    await db.delete(group)
+    await audit(db, tenant_id=ctx.tenant_id, user_id=ctx.user.id, action="group.delete",
+                resource_type="group", resource_id=group_id, request_id=ctx.request_id)
+    await db.commit()
+    return {"deleted": True}
 
 
 @router.post("", response_model=GroupSummary)

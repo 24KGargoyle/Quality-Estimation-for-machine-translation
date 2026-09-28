@@ -122,7 +122,9 @@ class TestWordParser:
         with pytest.raises(UnsupportedFileError):
             parser.parse(content=b"not a real docx", **_kwargs())
 
-    def test_legacy_doc_reported_unsupported_not_crashed(self):
+    def test_legacy_doc_reported_unsupported_not_crashed(self, monkeypatch):
+        from meeting_intel.ingestion.parsers import extended
+        monkeypatch.setattr(extended, 'office_executable', lambda: None)
         parser = ParserFactory.get_parser("doc")
         with pytest.raises(UnsupportedFileError, match="Legacy .doc"):
             parser.parse(content=b"anything", **_kwargs(filename="old.doc"))

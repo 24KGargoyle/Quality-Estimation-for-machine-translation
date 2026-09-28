@@ -108,6 +108,7 @@ class SourceSchema(BaseModel):
 
 
 class ChatRequest(BaseModel):
+    customer_id: str | None = None
     meeting_id: str
     document_id: str | None = None
     conversation_id: str | None = None

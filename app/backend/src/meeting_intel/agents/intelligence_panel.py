@@ -139,9 +139,10 @@ async def build_intelligence_panel(
     participant_names: list[str],
     mentioned_people: list[str],
     cited_source_files: set[str],
+    scoped_evidence_only: bool = False,
 ) -> IntelligencePanel:
     topics = _extract_topics(chunks)
-    documents = await _related_documents(
+    documents = [] if scoped_evidence_only else await _related_documents(
         tenant_id=tenant_id, meeting_id=meeting_id, exclude_source_files=cited_source_files, terms={t.lower() for t in topics}
     )
     people = _related_people(chunks, participant_names, mentioned_people)
@@ -149,7 +150,7 @@ async def build_intelligence_panel(
     ideas = _generate_ideas(topics, documents, has_transcript)
 
     web_research = None
-    if should_research_web(question):
+    if not scoped_evidence_only and should_research_web(question):
         topic = extract_research_topic(question)
         try:
             web_research = await get_web_research_provider().research(topic)

@@ -99,6 +99,12 @@ async def _set_current_file(job_id: str, filename: str) -> None:
 
 
 def _recommended_action(reason: str, file_type: str) -> str:
+    if 'LibreOffice' in reason:
+        return 'Configure OFFICE_CONVERTER_PATH on the server, or upload a modern Office format.'
+    if 'transcription' in reason.lower():
+        return 'Enable local media transcription and install its model, then retry the file.'
+    if 'extract-msg' in reason or 'xlrd' in reason or 'striprtf' in reason:
+        return 'Install the backend import dependencies, then retry the file.'
     if file_type == "doc":
         return "Convert to .docx and re-upload."
     if file_type == "xls":
@@ -117,7 +123,7 @@ async def _index_documents(
 ) -> int:
     if not documents:
         return 0
-    vectors = get_embedding_provider().embed_texts([d.content for d in documents])
+    vectors = await asyncio.to_thread(get_embedding_provider().embed_texts, [d.content for d in documents])
     chunks = [
         IndexableChunk(
             id=f"{document_id_prefix}:{i}",
@@ -145,6 +151,9 @@ async def _index_documents(
         for i, (doc, vector) in enumerate(zip(documents, vectors))
     ]
     await get_search_provider().index_chunks(chunks)
+    if get_settings().search_provider == 'memory':
+        from meeting_intel.retrieval.local_index_cache import save
+        await asyncio.to_thread(save, chunks)
     return len(chunks)
 
 
@@ -152,7 +161,10 @@ async def _process_one(job_id: str, tenant_id: str, user_id: str, staged: Staged
     async with semaphore:
         await _set_current_file(job_id, staged.relative_path or staged.filename)
         file_type = file_type_of(staged.filename)
-        h = compute_file_hash(staged.content)
+        content_hash = compute_file_hash(staged.content)
+        # Scope deduplication and chunk/blob identities to the uploader. A file
+        # uploaded by another person must not confer access to their workspace.
+        h = compute_file_hash(f"{user_id}:{content_hash}".encode())
 
         async with SessionLocal() as db:
             try:
@@ -169,9 +181,11 @@ async def _process_one(job_id: str, tenant_id: str, user_id: str, staged: Staged
 
                 existing = (
                     await db.execute(
-                        select(HistoricalDocument).where(
-                            HistoricalDocument.tenant_id == tenant_id, HistoricalDocument.file_hash == h
-                        )
+                        select(HistoricalDocument).join(Meeting, Meeting.id == HistoricalDocument.meeting_id).where(
+                            HistoricalDocument.tenant_id == tenant_id,
+                            Meeting.organizer_id == user_id,
+                            HistoricalDocument.file_hash.in_([h, content_hash]),
+                        ).order_by(HistoricalDocument.created_at).limit(1)
                     )
                 ).scalar_one_or_none()
                 if existing is not None:
@@ -194,7 +208,7 @@ async def _process_one(job_id: str, tenant_id: str, user_id: str, staged: Staged
                 parser = ParserFactory.get_parser(file_type)
                 document_id_prefix = f"hist:{h[:16]}"
                 try:
-                    result = parser.parse(
+                    result = await asyncio.to_thread(parser.parse,
                         content=staged.content, filename=staged.filename, relative_path=staged.relative_path,
                         tenant_id=tenant_id, meeting_id=meeting.id, title=meeting.title,
                         document_id_prefix=document_id_prefix,
@@ -280,6 +294,7 @@ async def _process_one(job_id: str, tenant_id: str, user_id: str, staged: Staged
                     import_job_id=job_id, filename=staged.filename, relative_path=staged.relative_path,
                     file_type=file_type, status=ImportFileStatus.success, document_id=doc_row.id,
                     meeting_id=meeting.id, chunk_count=chunk_count,
+                    reason='; '.join(result.warnings)[:4000] if result.warnings else None,
                 ))
                 await db.commit()
                 await _bump(job_id, processed_files=1, successful_files=1)

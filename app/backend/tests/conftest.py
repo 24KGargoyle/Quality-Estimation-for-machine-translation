@@ -29,6 +29,8 @@ os.environ["MS_TENANT_ID"] = ""
 os.environ["MS_CLIENT_ID"] = ""
 os.environ["MS_CLIENT_SECRET"] = ""
 os.environ["WEB_RESEARCH_PROVIDER"] = "none"
+os.environ["OPERATIONAL_ENABLED"] = "false"
+os.environ["OPERATIONAL_UPLOADED_EVIDENCE_ENABLED"] = "false"
 os.environ["HF_HUB_OFFLINE"] = "1"
 os.environ["TRANSFORMERS_OFFLINE"] = "1"
 

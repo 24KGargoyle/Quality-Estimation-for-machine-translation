@@ -25,6 +25,7 @@ from meeting_intel.db.models import (
     HistoricalDocument,
 )
 from meeting_intel.db.session import get_db
+from meeting_intel.config import get_settings
 from meeting_intel.retrieval.restore_imports import ImportedContentUnavailableError
 from meeting_intel.security.authz import audit, get_authorized_conversation, get_authorized_meeting
 
@@ -85,13 +86,24 @@ async def chat(
             meeting_id=meeting.id,
         )
     )
-    await db.flush()
+    # Persist the question before slow retrieval/model work; release SQLite writer lock.
+    await db.commit()
 
     try:
-        result = await answer_question(
-            db, meeting=meeting, user=ctx.user, history=[] if document else history,
-            question=payload.message, document=document,
-        )
+        # Customer-context changes must not autoflush during evidence reads.
+        with db.no_autoflush:
+            if get_settings().operational_enabled:
+                from meeting_intel.operational import handle_query
+                result = await handle_query(
+                    db, meeting=meeting, user=ctx.user, history=history, question=payload.message,
+                    document=document, conversation=conversation, selected_id=payload.customer_id,
+                    request_id=ctx.request_id,
+                )
+            else:
+                result = await answer_question(
+                    db, meeting=meeting, user=ctx.user, history=[] if document else history,
+                    question=payload.message, document=document,
+                )
     except ImportedContentUnavailableError as exc:
         raise HTTPException(503, str(exc)) from exc
 
@@ -173,6 +185,7 @@ async def chat(
         tenant_id=ctx.tenant_id, meeting_id=meeting.id, question=payload.message,
         chunks=result.retrieved_chunks, participant_names=list(participant_names),
         mentioned_people=result.mentioned_people, cited_source_files=cited_files,
+        **({"scoped_evidence_only": True} if get_settings().operational_enabled else {}),
     )
 
     return ChatResponse(

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import Icon from "@/components/Icon";
 import RequireAuth from "@/components/RequireAuth";
 import { api } from "@/lib/api";
 import { GroupSummary } from "@/lib/types";
@@ -11,6 +12,20 @@ function GroupsContent() {
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [deleting, setDeleting] = useState<string | null>(null);
+
+  async function deleteGroup(group: GroupSummary) {
+    if (!window.confirm(`Delete "${group.name}" and its group messages, discussions, decisions and action items? This cannot be undone. Imported meetings and Microsoft Teams groups are not deleted.`)) return;
+    setDeleting(group.id);
+    setError(null);
+    try {
+      await api.delete(`/api/groups/${group.id}`);
+      setGroups((previous) => previous.filter((item) => item.id !== group.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete group");
+    } finally { setDeleting(null); }
+  }
 
   function refresh() {
     api.get<GroupSummary[]>("/api/groups").then(setGroups).catch(() => {});
@@ -60,14 +75,20 @@ function GroupsContent() {
 
       <div className="mt-6 space-y-2">
         {groups.map((g) => (
+          <div key={g.id} className="flex items-center gap-3 rounded-lg border border-neutral-200 bg-white px-4 py-3">
           <Link
-            key={g.id}
             href={`/groups/${g.id}`}
-            className="flex items-center justify-between rounded-lg border border-neutral-200 bg-white px-4 py-3 hover:border-neutral-300"
+            className="flex min-w-0 flex-1 items-center justify-between gap-3"
           >
             <span className="text-sm font-medium">{g.name}</span>
             <span className="text-xs text-neutral-400">{g.member_count} members</span>
           </Link>
+          <button type="button" onClick={() => deleteGroup(g)} disabled={!!deleting}
+            aria-label={deleting === g.id ? "Deleting group" : `Delete ${g.name}`} title="Delete group"
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-700 transition-colors hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 disabled:opacity-50">
+            <Icon name="trash" size={18} />
+          </button>
+          </div>
         ))}
         {groups.length === 0 && <p className="text-sm text-neutral-400">No groups yet.</p>}
       </div>

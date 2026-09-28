@@ -59,7 +59,7 @@ class PowerPointParser(DocumentParser):
                         title=title,
                         source_file=filename,
                         relative_path=relative_path,
-                        file_type="pptx",
+                        file_type=filename.rsplit('.', 1)[-1].lower(),
                         document_type=self.document_type,
                         content=piece,
                         slide_number=slide_number,

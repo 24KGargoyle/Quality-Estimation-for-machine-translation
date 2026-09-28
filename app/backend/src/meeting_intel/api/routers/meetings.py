@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from meeting_intel.agents.query_understanding import understand_query
@@ -20,6 +20,55 @@ from meeting_intel.ingestion.pipeline import load_meeting_from_graph, load_meeti
 from meeting_intel.security.authz import audit, get_authorized_meeting
 
 router = APIRouter(prefix="/api/meetings", tags=["meetings"])
+
+
+@router.delete("/{meeting_id}")
+async def delete_meeting(
+    meeting_id: str, ctx: RequestContext = Depends(get_current_context), db: AsyncSession = Depends(get_db),
+) -> dict:
+    from meeting_intel.db.models import (
+        ActionItem, AIResponse, Conversation, Decision, Discussion, Feedback,
+        HistoricalImportJob, ImportedFileResult, ImportJobStatus, MeetingStatus,
+        MeetingTranscript, Message, UserRole,
+    )
+    from meeting_intel.retrieval.hybrid_search import get_search_provider
+    from meeting_intel.storage.blob_storage import get_blob_storage
+
+    meeting = await get_authorized_meeting(db, user=ctx.user, meeting_id=meeting_id)
+    if meeting.organizer_id != ctx.user.id and ctx.user.role != UserRole.admin:
+        raise HTTPException(403, "Only the meeting organizer or a tenant administrator can delete this meeting.")
+    active = (await db.execute(select(HistoricalImportJob.id).where(
+        HistoricalImportJob.tenant_id == ctx.tenant_id,
+        HistoricalImportJob.status.in_([ImportJobStatus.queued, ImportJobStatus.processing]),
+    ))).first()
+    if active or meeting.status == MeetingStatus.indexing:
+        raise HTTPException(409, "Wait for imports and meeting processing to finish before deleting.")
+    documents = (await db.execute(select(HistoricalDocument).where(
+        HistoricalDocument.tenant_id == ctx.tenant_id, HistoricalDocument.meeting_id == meeting_id,
+    ))).scalars().all()
+    try:
+        await get_search_provider().delete_meeting(tenant_id=ctx.tenant_id, meeting_id=meeting_id)
+        for document in documents:
+            if document.blob_path:
+                await get_blob_storage().delete(path=document.blob_path)
+    except Exception:
+        raise HTTPException(503, "Could not finish deleting stored files or search entries. Please retry.") from None
+    for document in documents:
+        from meeting_intel.retrieval.local_index_cache import cache_path
+        cache_path(ctx.tenant_id, document.meeting_id, f'hist:{document.file_hash[:16]}').unlink(missing_ok=True)
+        await db.delete(document)
+    # Preserve existing chat/discussion history while removing its meeting association.
+    # Explicit updates also work on SQLite connections without FK enforcement.
+    for model in (ActionItem, AIResponse, Conversation, Decision, Discussion, Feedback, ImportedFileResult, Message):
+        await db.execute(update(model).where(model.meeting_id == meeting_id).values(meeting_id=None))
+    await db.execute(delete(MeetingTranscript).where(MeetingTranscript.meeting_id == meeting_id))
+    await db.execute(delete(MeetingParticipant).where(MeetingParticipant.meeting_id == meeting_id))
+    await db.execute(delete(Meeting).where(Meeting.id == meeting_id, Meeting.tenant_id == ctx.tenant_id))
+    await audit(db, tenant_id=ctx.tenant_id, user_id=ctx.user.id, action="meeting.delete",
+                resource_type="meeting", resource_id=meeting_id, request_id=ctx.request_id,
+                extra={"deleted_documents": len(documents)})
+    await db.commit()
+    return {"deleted": True}
 
 
 async def _to_detail(db: AsyncSession, meeting: Meeting) -> MeetingDetail:
@@ -133,6 +182,7 @@ async def get_meeting(
 async def search_meeting(
     meeting_id: str,
     q: str,
+    customer_id: str | None = None,
     ctx: RequestContext = Depends(get_current_context),
     db: AsyncSession = Depends(get_db),
 ) -> list[dict]:
@@ -141,7 +191,9 @@ async def search_meeting(
     meeting = await get_authorized_meeting(db, user=ctx.user, meeting_id=meeting_id)
     from meeting_intel.retrieval.hybrid_search import hybrid_search
 
-    results = await hybrid_search(db, tenant_id=ctx.tenant_id, meeting_ids=[meeting.id], query=q, top_k=15)
+    from meeting_intel.operational import browse_scope
+    scope = await browse_scope(db=db, user=ctx.user, meeting_id=meeting.id, query=q, selected_id=customer_id)
+    results = await hybrid_search(db, tenant_id=ctx.tenant_id, meeting_ids=[meeting.id], query=q, top_k=15, **scope)
     return [
         {
             "chunk_id": r.chunk.id,
@@ -188,6 +240,7 @@ async def resolved_participants(
 async def meeting_intelligence(
     meeting_id: str,
     q: str,
+    customer_id: str | None = None,
     ctx: RequestContext = Depends(get_current_context),
     db: AsyncSession = Depends(get_db),
 ) -> IntelligencePanelSchema:
@@ -200,13 +253,16 @@ async def meeting_intelligence(
         await db.execute(select(MeetingParticipant.display_name).where(MeetingParticipant.meeting_id == meeting.id))
     ).scalars().all()
     understanding = understand_query(q, list(participants))
+    from meeting_intel.operational import browse_scope
+    scope = await browse_scope(db=db, user=ctx.user, meeting_id=meeting.id, query=q, selected_id=customer_id)
     chunks = await hybrid_search(
-        db, tenant_id=ctx.tenant_id, meeting_ids=[meeting.id], query=q, speaker=understanding.person, top_k=15
+        db, tenant_id=ctx.tenant_id, meeting_ids=[meeting.id], query=q, speaker=understanding.person, top_k=15, **scope
     )
     panel = await build_intelligence_panel(
         tenant_id=ctx.tenant_id, meeting_id=meeting.id, question=q, chunks=chunks,
         participant_names=list(participants), mentioned_people=understanding.all_mentioned_people,
         cited_source_files=set(),
+        **({'scoped_evidence_only': True} if scope else {}),
     )
     return panel_to_schema(panel)
 
@@ -214,6 +270,7 @@ async def meeting_intelligence(
 @router.get("/{meeting_id}/sources")
 async def get_meeting_sources(
     meeting_id: str,
+    customer_id: str | None = None,
     ctx: RequestContext = Depends(get_current_context),
     db: AsyncSession = Depends(get_db),
 ) -> list[dict]:
@@ -224,7 +281,9 @@ async def get_meeting_sources(
     meeting = await get_authorized_meeting(db, user=ctx.user, meeting_id=meeting_id)
     from meeting_intel.retrieval.hybrid_search import get_search_provider
 
-    chunks = await get_search_provider().chunks_for_meeting(tenant_id=ctx.tenant_id, meeting_id=meeting.id)
+    from meeting_intel.operational import browse_scope
+    scope = await browse_scope(db=db, user=ctx.user, meeting_id=meeting.id, selected_id=customer_id)
+    chunks = await get_search_provider().chunks_for_meeting(tenant_id=ctx.tenant_id, meeting_id=meeting.id, **scope)
     return [
         {
             "chunk_id": c.id,

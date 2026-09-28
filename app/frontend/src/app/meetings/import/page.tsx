@@ -2,15 +2,18 @@
 
 import { useEffect, useRef, useState } from "react";
 import RequireAuth from "@/components/RequireAuth";
+import Icon from "@/components/Icon";
 import { api, ApiError } from "@/lib/api";
 import { ImportedFileResultSchema, ImportJobResults, ImportJobSummary } from "@/lib/types";
 
 const SUPPORTED_EXTENSIONS = ["vtt", "txt", "docx", "doc", "xlsx", "xls", "pdf", "pptx", "csv"];
 const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024;
+type ImportFormat = { extension: string; ready: boolean; note: string | null; max_bytes: number };
 
-function skipReason(file: File): string | null {
-  if (!SUPPORTED_EXTENSIONS.includes(extOf(file.name))) return "Unsupported file type";
-  if (file.size > MAX_FILE_SIZE_BYTES) return "Exceeds the 50 MB per-file limit";
+function skipReason(file: File, formats: ImportFormat[]): string | null {
+  const format = formats.find((f) => f.extension === extOf(file.name));
+  if (!format) return "Unsupported file type";
+  if (file.size > format.max_bytes) return `Exceeds the ${format.max_bytes / (1024 * 1024)} MB per-file limit`;
   return null;
 }
 
@@ -26,14 +29,20 @@ function relativePathOf(file: File): string {
   return anyFile.webkitRelativePath || file.name;
 }
 
-function detectCounts(files: File[]): Record<string, number> {
+function detectCounts(files: File[], formats: ImportFormat[]): Record<string, number> {
   const counts: Record<string, number> = {};
   for (const f of files) {
     const ext = extOf(f.name);
-    const key = SUPPORTED_EXTENSIONS.includes(ext) ? ext : "unsupported";
+    const key = formats.some((f) => f.extension === ext) ? ext : "unsupported";
     counts[key] = (counts[key] || 0) + 1;
   }
   return counts;
+}
+
+function importTime(value: string): string {
+  // SQLite timestamps are UTC but older API responses omit the timezone.
+  const utc = /(?:Z|[+-]\d{2}:\d{2})$/i.test(value) ? value : `${value.replace(" ", "T")}Z`;
+  return new Date(utc).toLocaleString(undefined, { timeZoneName: "short" });
 }
 
 function statusColor(status: string): string {
@@ -58,6 +67,14 @@ function jobStatusBadge(status: string): string {
 }
 
 function ImportContent() {
+  const [formats, setFormats] = useState<ImportFormat[]>(SUPPORTED_EXTENSIONS.map((extension) => ({
+    extension, ready: true, note: null, max_bytes: MAX_FILE_SIZE_BYTES,
+  })));
+  useEffect(() => {
+    api.get<{ formats: ImportFormat[] }>("/api/historical-imports/capabilities")
+      .then((data) => setFormats(data.formats))
+      .catch(() => {});
+  }, []);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [job, setJob] = useState<ImportJobSummary | null>(null);
@@ -67,6 +84,28 @@ function ImportContent() {
   const [expandedJob, setExpandedJob] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
+
+  async function deleteImport(item: ImportJobSummary) {
+    if (!window.confirm(`Delete the import from ${importTime(item.created_at)}? Files originally imported by this batch and their search entries will be permanently removed. Duplicate-only batches remove only history. Existing meetings and chats remain. You can upload the files again afterward.`)) return;
+    setDeleting(item.id);
+    setError(null);
+    try {
+      await api.delete(`/api/historical-imports/${item.id}`);
+      setHistory((previous) => previous.filter((entry) => entry.id !== item.id));
+      setHistoryResults((previous) => {
+        const next = { ...previous };
+        delete next[item.id];
+        return next;
+      });
+      if (expandedJob === item.id) setExpandedJob(null);
+      if (job?.id === item.id) { setJob(null); setResults(null); }
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to delete import");
+    } finally {
+      setDeleting(null);
+    }
+  }
 
   useEffect(() => {
     // webkitdirectory/directory have no typed React prop — set imperatively.
@@ -82,6 +121,30 @@ function ImportContent() {
 
   useEffect(refreshHistory, []);
 
+  // Keep history and expanded results live, including after a page reload.
+  useEffect(() => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    async function refreshProgress() {
+      try {
+        const latest = await api.get<ImportJobSummary[]>("/api/historical-imports");
+        if (cancelled) return;
+        setHistory(latest);
+        setJob((current) => current ? latest.find((item) => item.id === current.id) ?? current : current);
+        if (expandedJob) {
+          const full = await api.get<ImportJobResults>(`/api/historical-imports/${expandedJob}/results`);
+          if (!cancelled) setHistoryResults((previous) => ({ ...previous, [expandedJob]: full.results }));
+        }
+      } catch {
+        // A temporary connection failure must not permanently stop polling.
+      } finally {
+        if (!cancelled) timer = setTimeout(refreshProgress, 3000);
+      }
+    }
+    timer = setTimeout(refreshProgress, 3000);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [expandedJob]);
+
   function handleSelectFolder(e: React.ChangeEvent<HTMLInputElement>) {
     const selected = Array.from(e.target.files || []);
     setFiles(selected);
@@ -96,14 +159,21 @@ function ImportContent() {
       try {
         const current = await api.get<ImportJobSummary>(`/api/historical-imports/${jobId}`);
         setJob(current);
+        setError(null);
         if (current.status !== "queued" && current.status !== "processing") {
           const full = await api.get<ImportJobResults>(`/api/historical-imports/${jobId}/results`);
           setResults(full.results);
           refreshHistory();
           return;
         }
-      } catch {
-        return;
+      } catch (err) {
+        if (err instanceof ApiError && [401, 403, 404].includes(err.status)) {
+          setError(err.message);
+          setJob(null);
+          return;
+        }
+        setError("Connection interrupted. Retrying progress updates?");
+        await new Promise((resolve) => setTimeout(resolve, 3000));
       }
     }
   }
@@ -144,10 +214,11 @@ function ImportContent() {
     }
   }
 
-  const counts = detectCounts(files);
-  const importableFiles = files.filter((file) => !skipReason(file))
+  const counts = detectCounts(files, formats);
+  const importableFiles = files.filter((file) => !skipReason(file, formats))
     .sort((a, b) => relativePathOf(a).localeCompare(relativePathOf(b)));
-  const skippedFiles = files.filter((file) => skipReason(file));
+  const skippedFiles = files.filter((file) => skipReason(file, formats));
+  const setupNeeded = formats.filter((format) => !format.ready && files.some((file) => extOf(file.name) === format.extension));
   const inProgress = job && (job.status === "queued" || job.status === "processing");
 
   return (
@@ -155,7 +226,7 @@ function ImportContent() {
       <h1 className="text-xl font-semibold">Historical Meeting Data</h1>
       <p className="mt-1 text-sm text-neutral-500">
         Upload a folder containing Teams transcripts and supporting meeting documents (Word, Excel,
-        PDF, PowerPoint, text, and CSV files). Files are grouped into meetings automatically —
+        PDF, PowerPoint, email, audio, video, text, CSV, and ZIP archives). Files are grouped into meetings automatically —
         everything in the same folder becomes one meeting.
       </p>
 
@@ -179,20 +250,23 @@ function ImportContent() {
                 </span>
               ))}
             </div>
-            <p className="mt-3">Ready to import: {importableFiles.length}. Skipped before upload: {skippedFiles.length}.</p>
+            <p className="mt-3">Accepted for upload: {importableFiles.length}. Skipped before upload: {skippedFiles.length}.</p>
+            {setupNeeded.map((format) => <p className="mt-2 text-amber-700" key={format.extension}>
+              {format.extension.toUpperCase()}: {format.note} These files cannot be searched until processing succeeds.
+            </p>)}
             {skippedFiles.length > 0 && (
               <details className="mt-2 text-amber-700">
                 <summary className="cursor-pointer">View skipped files</summary>
                 <ul className="mt-2 max-h-48 overflow-auto space-y-1 break-all">
                   {skippedFiles.map((file, index) => (
                     <li key={`${relativePathOf(file)}-${index}`}>
-                      {relativePathOf(file)}: {skipReason(file)}
+                      {relativePathOf(file)}: {skipReason(file, formats)}
                     </li>
                   ))}
                 </ul>
               </details>
             )}
-            {importableFiles.length === 0 && <p className="mt-2">Select a folder with supported files of 50 MB or less.</p>}
+            <p className="mt-2 text-neutral-500">Documents: up to 50 MB each. Audio/video: up to 500 MB each. Recordings are transcribed; video frames are not analyzed.</p>
           </div>
         )}
 
@@ -230,7 +304,7 @@ function ImportContent() {
           )}
 
           {results && (
-            <div className="mt-4 overflow-x-auto">
+            <div className="import-file-list mt-4" tabIndex={0} aria-label="Import file results">
               <table className="w-full text-left text-xs">
                 <thead className="text-neutral-400">
                   <tr>
@@ -244,7 +318,7 @@ function ImportContent() {
                 <tbody>
                   {results.map((r, i) => (
                     <tr key={i} className="border-t border-neutral-100">
-                      <td className="py-1.5 pr-3">{r.relative_path}</td>
+                      <td className="py-1.5 pr-3"><div title={r.relative_path}>{r.relative_path}</div></td>
                       <td className="py-1.5 pr-3">{r.file_type}</td>
                       <td className={`py-1.5 pr-3 font-medium ${statusColor(r.status)}`}>{r.status}</td>
                       <td className="py-1.5 pr-3 text-neutral-500">{r.reason || "—"}</td>
@@ -263,23 +337,39 @@ function ImportContent() {
         <div className="mt-2 space-y-2">
           {history.map((h) => (
             <div key={h.id} className="rounded-lg border border-neutral-200 bg-white">
+              <div className="flex items-center gap-3 p-4">
               <button
                 onClick={() => toggleHistoryDetail(h.id)}
-                className="flex w-full items-center justify-between px-4 py-3 text-left"
+                className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-3 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
               >
                 <div className="text-sm">
                   <div className="font-medium">
-                    {new Date(h.created_at).toLocaleString()} · {h.created_by}
+                    {importTime(h.created_at)} · {h.created_by}
                   </div>
                   <div className="text-xs text-neutral-500">
                     Total {h.total_files} · Successful {h.successful_files} · Skipped {h.skipped_files} · Failed{" "}
                     {h.failed_files}
                   </div>
+                  {["queued", "processing"].includes(h.status) && (
+                    <div className="mt-1 text-xs text-blue-700" role="status">
+                      Processed {h.processed_files} of {h.total_files} files ? {Math.max(0, h.total_files - h.processed_files)} remaining.
+                      {" "}Audio/video transcription may take longer.
+                    </div>
+                  )}
                 </div>
                 <span className={`rounded-full px-2 py-0.5 text-xs ${jobStatusBadge(h.status)}`}>{h.status}</span>
               </button>
+              <button
+                type="button"
+                onClick={() => deleteImport(h)}
+                disabled={!!deleting || busy || history.some((entry) => ["queued", "processing"].includes(entry.status))}
+                className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 shadow-sm transition-colors hover:border-red-300 hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                aria-label={`Delete import from ${importTime(h.created_at)}`}
+                title="Delete import"
+              ><Icon name="trash" size={18} />{deleting === h.id ? "Deleting…" : "Delete"}</button>
+              </div>
               {expandedJob === h.id && historyResults[h.id] && (
-                <div className="overflow-x-auto border-t border-neutral-100 px-4 py-3">
+                <div className="import-file-list border-t border-neutral-100" tabIndex={0} aria-label="Imported files">
                   <table className="w-full text-left text-xs">
                     <thead className="text-neutral-400">
                       <tr>
@@ -291,7 +381,7 @@ function ImportContent() {
                     <tbody>
                       {historyResults[h.id].map((r, i) => (
                         <tr key={i} className="border-t border-neutral-100">
-                          <td className="py-1.5 pr-3">{r.relative_path}</td>
+                          <td className="py-1.5 pr-3"><div title={r.relative_path}>{r.relative_path}</div></td>
                           <td className={`py-1.5 pr-3 font-medium ${statusColor(r.status)}`}>{r.status}</td>
                           <td className="py-1.5 text-neutral-500">{r.reason || "—"}</td>
                         </tr>

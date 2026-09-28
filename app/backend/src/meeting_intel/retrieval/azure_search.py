@@ -91,6 +91,7 @@ class AzureAISearchProvider(SearchProvider):
             "name": self.settings.azure_search_index,
             "fields": [
                 {"name": "id", "type": "Edm.String", "key": True, "filterable": True},
+                {"name": "customer_id", "type": "Edm.String", "filterable": True},
                 {"name": "tenant_id", "type": "Edm.String", "filterable": True},
                 {"name": "meeting_id", "type": "Edm.String", "filterable": True},
                 {"name": "meeting_join_id", "type": "Edm.String", "filterable": True},
@@ -139,12 +140,15 @@ class AzureAISearchProvider(SearchProvider):
     async def index_chunks(self, chunks: list[IndexableChunk]) -> None:
         if not chunks:
             return
+        from .customer_metadata import bind_customers
+        chunks = bind_customers(chunks)
         await self.ensure_index()
         actions = [
             {
                 "@search.action": "mergeOrUpload",
                 "id": c.id,
                 "tenant_id": c.tenant_id,
+                "customer_id": c.customer_id or "",
                 "meeting_id": c.meeting_id,
                 "meeting_join_id": c.meeting_join_id or "",
                 "meeting_title": c.meeting_title,
@@ -172,13 +176,13 @@ class AzureAISearchProvider(SearchProvider):
         ]
         await self._request("POST", "/docs/index", {"value": actions})
 
-    async def _ids_for_meeting(self, tenant_id: str, meeting_id: str) -> list[str]:
+    async def _ids_for_meeting(self, tenant_id: str, meeting_id: str, document_id: str | None = None) -> list[str]:
         ids: list[str] = []
         skip = 0
         while True:
             data = await self._request("POST", "/docs/search", {
                 "search": "*",
-                "filter": f"tenant_id eq '{_escape_odata(tenant_id)}' and meeting_id eq '{_escape_odata(meeting_id)}'",
+                "filter": f"tenant_id eq '{_escape_odata(tenant_id)}' and meeting_id eq '{_escape_odata(meeting_id)}'" + (f" and document_id eq '{_escape_odata(document_id)}'" if document_id else ""),
                 "select": "id", "top": PAGE_SIZE, "skip": skip,
             })
             rows = data.get("value", [])
@@ -189,13 +193,26 @@ class AzureAISearchProvider(SearchProvider):
 
     async def delete_meeting(self, *, tenant_id: str, meeting_id: str) -> None:
         ids = await self._ids_for_meeting(tenant_id, meeting_id)
-        if not ids:
-            return
-        await self._request("POST", "/docs/index", {"value": [{"@search.action": "delete", "id": i} for i in ids]})
+        for offset in range(0, len(ids), 1000):
+            result = await self._request("POST", "/docs/index", {"value": [
+                {"@search.action": "delete", "id": key} for key in ids[offset:offset + 1000]
+            ]})
+            if any(not item.get("status", False) for item in result.get("value", [])):
+                raise RuntimeError("Search meeting deletion failed; retry deletion.")
+
+    async def delete_document(self, *, tenant_id: str, meeting_id: str, document_id: str) -> None:
+        ids = await self._ids_for_meeting(tenant_id, meeting_id, document_id)
+        for offset in range(0, len(ids), 1000):
+            result = await self._request("POST", "/docs/index", {"value": [
+                {"@search.action": "delete", "id": key} for key in ids[offset:offset + 1000]
+            ]})
+            if any(not item.get("status", False) for item in result.get("value", [])):
+                raise RuntimeError("Search document deletion failed; retry deletion.")
 
     @staticmethod
     def _hit(row: dict) -> SearchHit:
         return SearchHit(
+            customer_id=row.get("customer_id"),
             id=row["id"], meeting_id=row["meeting_id"], content=row.get("content", ""),
             chunk_index=row.get("chunk_index", 0), start_time=row.get("start_time", 0.0),
             end_time=row.get("end_time", 0.0), speaker_name=row.get("speaker_name") or None,
@@ -206,10 +223,18 @@ class AzureAISearchProvider(SearchProvider):
             slide_number=row.get("slide_number"), section=row.get("section") or None,
         )
 
-    async def chunks_for_meeting(self, *, tenant_id: str, meeting_id: str) -> list[SearchHit]:
+    async def chunks_for_meeting(self, *, tenant_id: str, meeting_id: str, customer_id: str | None = None,
+                                 document_ids: list[str] | None = None) -> list[SearchHit]:
+        if document_ids == []:
+            return []
+        scope = f"tenant_id eq '{_escape_odata(tenant_id)}' and meeting_id eq '{_escape_odata(meeting_id)}'"
+        if customer_id is not None:
+            scope += f" and customer_id eq '{_escape_odata(customer_id)}'"
+        if document_ids is not None:
+            scope += ' and (' + ' or '.join(f"document_id eq '{_escape_odata(d)}'" for d in document_ids) + ')'
         data = await self._request("POST", "/docs/search", {
             "search": "*",
-            "filter": f"tenant_id eq '{_escape_odata(tenant_id)}' and meeting_id eq '{_escape_odata(meeting_id)}'",
+            "filter": scope,
             "orderby": "chunk_index asc", "top": PAGE_SIZE,
         })
         return [self._hit(row) for row in data.get("value", [])]
@@ -255,6 +280,7 @@ class AzureAISearchProvider(SearchProvider):
         speaker: str | None = None,
         top_k: int,
         document_id: str | None = None,
+        customer_id: str | None = None,
     ) -> list[SearchHit]:
         if not meeting_ids or not query.strip():
             return []
@@ -265,6 +291,9 @@ class AzureAISearchProvider(SearchProvider):
             "filter": self._scope_filter(tenant_id, meeting_ids, speaker),
             "top": top_k,
         }
+        if customer_id is not None:
+            body["filter"] += f" and customer_id eq '{_escape_odata(customer_id)}'"
+            body["vectorFilterMode"] = "preFilter"
         if document_id is not None:
             body["filter"] += f" and document_id eq '{_escape_odata(document_id)}'"
         if vector is not None:

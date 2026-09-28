@@ -280,9 +280,9 @@ async def test_path_traversal_in_relative_path_is_rejected(client):
 
 
 async def test_oversized_file_is_rejected(client, monkeypatch):
-    import meeting_intel.api.routers.historical_imports as router_module
+    import meeting_intel.ingestion.capabilities as limits_module
 
-    monkeypatch.setattr(router_module, "MAX_FILE_SIZE_BYTES", 10)
+    monkeypatch.setattr(limits_module, "MAX_FILE_SIZE_BYTES", 10)
     token = await dev_login(client, email="sec2@acme.com", display_name="Sec2", tenant_name="Acme")
     headers = {"Authorization": f"Bearer {token}"}
     files = [("files", ("F/big.vtt", b"x" * 1000, "text/vtt"))]
@@ -295,3 +295,26 @@ async def test_empty_upload_is_rejected(client):
     headers = {"Authorization": f"Bearer {token}"}
     resp = await client.post("/api/historical-imports", headers=headers, files=[])
     assert resp.status_code in (400, 422)
+
+async def test_same_files_different_users_get_isolated_libraries(client):
+    tokens = [await dev_login(client, email=f'{name}@acme.test', display_name=name, tenant_name='Shared')
+              for name in ('First', 'Second')]
+    headers = [{'Authorization': f'Bearer {token}'} for token in tokens]
+    async def upload(index, files):
+        response = await client.post('/api/historical-imports', headers=headers[index], files=files)
+        assert response.status_code == 200
+        return await _wait_for_job(client, headers[index], response.json()['id'])
+    shared = ('files', ('Project/shared.txt', b'Shared launch notes for Monday.', 'text/plain'))
+    private = ('files', ('Project/private.txt', b'Private owner-only information.', 'text/plain'))
+    assert (await upload(0, [shared, private]))['successful_files'] == 2
+    assert (await upload(1, [shared]))['successful_files'] == 1
+    libraries = [(await client.get('/api/meetings', headers=h)).json() for h in headers]
+    assert len(libraries[1]) == 1
+    second_id = libraries[1][0]['id']
+    first_id = next(m['id'] for m in libraries[0] if m['id'] != second_id)
+    assert first_id != second_id
+    detail = (await client.get('/api/meetings/'+second_id, headers=headers[1])).json()
+    assert len(detail['documents']) == 1
+    assert detail['documents'][0]['source_file'] == 'shared.txt'
+    assert (await client.get('/api/meetings/'+first_id, headers=headers[1])).status_code == 403
+    assert (await upload(1, [shared]))['skipped_files'] == 1

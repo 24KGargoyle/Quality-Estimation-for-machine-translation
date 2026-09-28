@@ -99,6 +99,10 @@ class Settings(BaseSettings):
     # --- Retrieval ---
     retrieval_top_k: int = 8
     retrieval_min_score: float = 0.15
+    operational_enabled: bool = False
+    operational_catalog_path: str = "config/operational.json"
+    operational_min_authority: int = 80
+    operational_uploaded_evidence_enabled: bool = False
 
     # --- Web Research (Related Intelligence sidebar) ---
     # "none" (default): the sidebar's Web Research section is always empty,
@@ -115,6 +119,9 @@ class Settings(BaseSettings):
     local_blob_storage_dir: str = "./data/historical_blobs"
     azure_storage_container_sas_url: str | None = None
     import_max_concurrency: int = 4
+    office_converter_path: str | None = None
+    media_transcription_enabled: bool = False
+    media_transcription_model: str = "base"
 
     # --- CORS ---
     cors_origins: str = "http://localhost:3000"

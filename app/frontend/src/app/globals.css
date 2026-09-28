@@ -315,3 +315,13 @@ body:has(.app-sidebar) .app-main { margin-left: 248px; }
   .app-main > .login-layout { padding: 24px 16px; }
   .login-card { padding: 28px 24px; }
 }
+
+/* Header plus five fixed-height file rows; long details remain available on hover. */
+.import-file-list { max-height: 312px; overflow: auto; }
+.import-file-list table { table-layout: fixed; width: 100%; border-collapse: separate; border-spacing: 0; }
+.import-file-list thead { position: sticky; top: 0; z-index: 1; background: #f0f4fa; }
+.import-file-list thead tr { height: 32px; }
+.import-file-list tbody tr { height: 56px; }
+.import-file-list th, .import-file-list td { padding: 0 12px !important; }
+.import-file-list th:first-child { width: 48%; }
+.import-file-list td > div { max-height: 40px; line-height: 20px; overflow: auto; overflow-wrap: anywhere; }

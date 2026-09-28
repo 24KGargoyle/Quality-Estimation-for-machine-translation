@@ -15,6 +15,7 @@ meeting id, which only happens when `agents.meeting_router` detects an
 explicit cross-meeting request.
 """
 from __future__ import annotations
+from meeting_intel.llm.client import LLMNotConfiguredError
 
 from dataclasses import dataclass
 
@@ -53,18 +54,28 @@ async def hybrid_search(
     speaker: str | None = None,
     top_k: int | None = None,
     document_id: str | None = None,
+    customer_id: str | None = None,
 ) -> list[RetrievedChunk]:
     if not meeting_ids:
         return []
     if db is not None:
         from .restore_imports import restore_imports
-        await restore_imports(db, tenant_id=tenant_id, meeting_ids=meeting_ids, document_id=document_id)
+        await restore_imports(db, tenant_id=tenant_id, meeting_ids=meeting_ids, document_id=document_id,
+                              **({'customer_id': customer_id} if customer_id else {}))
     top_k = top_k or settings.retrieval_top_k
-    vector = get_embedding_provider().embed_query(query)
+    import asyncio
+    import logging
+    try:
+        vector = await asyncio.wait_for(
+            asyncio.to_thread(get_embedding_provider().embed_query, query), timeout=15)
+    except (TimeoutError, LLMNotConfiguredError):
+        logging.getLogger(__name__).warning("query_embedding_unavailable_using_keyword_search")
+        vector = None
 
     provider = get_search_provider()
     hits = await provider.hybrid_search(
         tenant_id=tenant_id, meeting_ids=meeting_ids, query=query, vector=vector, speaker=speaker, top_k=min(top_k * 3, 60),
+        **({"customer_id": customer_id} if customer_id is not None else {}),
         **({"document_id": document_id} if document_id else {}),
     )
     hits = rerank(hits, query=query, speaker=speaker)[:top_k]

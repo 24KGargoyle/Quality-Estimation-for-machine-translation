@@ -165,6 +165,7 @@ class ConversationKind(str, enum.Enum):
 
 
 class Conversation(Base, UUIDPk, TimestampMixin):
+    customer_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     __tablename__ = "conversations"
 
     tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)

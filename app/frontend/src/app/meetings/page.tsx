@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import Icon from "@/components/Icon";
 import RequireAuth from "@/components/RequireAuth";
 import { api, ApiError } from "@/lib/api";
 import { MeetingDetail, MeetingSummary } from "@/lib/types";
@@ -27,6 +28,23 @@ function MeetingsContent() {
   const [transcript, setTranscript] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  async function deleteMeeting(meeting: MeetingSummary) {
+    if (!window.confirm(`Delete "${meeting.title}" from the library? Its transcript, imported files, and search entries will be permanently removed. Saved chats and import history remain. This does not delete the meeting in Microsoft Teams.`)) return;
+    setDeleting(meeting.id);
+    setDeleteError(null);
+    try {
+      await api.delete(`/api/meetings/${meeting.id}`);
+      setMeetings((previous) => previous.filter((item) => item.id !== meeting.id));
+    } catch (err) {
+      setDeleteError(err instanceof ApiError ? err.message : "Failed to delete meeting");
+    } finally {
+      setDeleting(null);
+    }
+  }
 
   function refresh() {
     api.get<MeetingSummary[]>("/api/meetings").then(setMeetings).catch(() => {});
@@ -119,11 +137,12 @@ function MeetingsContent() {
       </form>
 
       <div className="meeting-library-list"><div className="section-heading"><h2>All meetings</h2><span>{meetings.length} in your library</span></div>
+        {deleteError && <p role="alert" className="mb-3 text-sm text-red-700">{deleteError}</p>}
         {meetings.map((m) => (
+          <div key={m.id} className="mb-3 flex items-center gap-3 rounded-lg border border-neutral-200 bg-white p-5">
           <Link
-            key={m.id}
             href={`/meetings/${m.id}`}
-            className="flex items-center justify-between rounded-lg border border-neutral-200 bg-white px-4 py-3 hover:border-neutral-300"
+            className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-3 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
           >
             <div>
               <div className="text-sm font-medium">{m.title}</div>
@@ -134,6 +153,15 @@ function MeetingsContent() {
             </div>
             <span className={`rounded-full px-2 py-0.5 text-xs ${statusBadge(m.status)}`}>{m.status}</span>
           </Link>
+          <button
+            type="button"
+            onClick={() => deleteMeeting(m)}
+            disabled={!!deleting || busy || m.status === "indexing"}
+            title="Delete meeting"
+            aria-label={`Delete ${m.title}`}
+            className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 shadow-sm transition-colors hover:border-red-300 hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+          ><Icon name="trash" size={18} />{deleting === m.id ? "Deleting?" : "Delete"}</button>
+          </div>
         ))}
         {meetings.length === 0 && <p className="text-sm text-neutral-400">No meetings loaded yet.</p>}
       </div>

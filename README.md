@@ -69,6 +69,11 @@ production use.
 
 ### Documentation
 
+Customer-scoped operational chat is available behind `OPERATIONAL_ENABLED` (off by
+default). See [operational setup and data contracts](docs/OPERATIONAL_KNOWLEDGE.md).
+For email, recordings, legacy Office files and ZIP uploads, see
+[extended import formats and setup](docs/EXTENDED_IMPORT_FORMATS.md).
+
 | Doc | Covers |
 |---|---|
 | `docs/ARCHITECTURE.md` | Component overview, directory layout, request flow, known limitations |

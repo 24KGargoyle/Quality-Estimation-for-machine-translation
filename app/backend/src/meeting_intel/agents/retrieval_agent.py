@@ -12,7 +12,7 @@ from meeting_intel.security.authz import get_all_authorized_meeting_ids
 
 
 async def resolve_scope_and_retrieve(
-    db: AsyncSession, *, meeting: Meeting, user: User, question: str, document=None
+    db: AsyncSession, *, meeting: Meeting, user: User, question: str, document=None, customer_id: str | None = None
 ) -> tuple[list[RetrievedChunk], QueryUnderstanding]:
     """Returns (retrieved_chunks, speaker_filter_used, cross_meeting_used)."""
     participants = (
@@ -28,12 +28,21 @@ async def resolve_scope_and_retrieve(
         # current meeting always included even if somehow missing from the authorized set
         meeting_ids = list({*authorized, meeting.id})
 
-    retrieval_query = question
+    from meeting_intel.agents.answer_focus import retrieval_question, answer_intent, focused_procedures
+    retrieval_query = retrieval_question(question)
+    from meeting_intel.agents.acronym_grounding import requested_acronym
+    acronym = requested_acronym(question)
+    if acronym:
+        retrieval_query = acronym + ' definition stands for means'
     if re.fullmatch(r"\s*(?:participants?|attendees?|who attended|who participated)[?.!\s]*", question, re.I):
         retrieval_query = "Who participated in the meeting? People who spoke, demonstrated, asked questions, or received a walkthrough."
     chunks = await hybrid_search(
         db, tenant_id=user.tenant_id, meeting_ids=meeting_ids, query=retrieval_query, speaker=speaker if document is None or document.file_type == "vtt" else None,
+        **({"customer_id": customer_id} if customer_id is not None else {}),
+        **({"top_k": 20} if answer_intent(question) == "procedure" else {}),
         document_id=f"hist:{document.file_hash[:16]}" if document else None,
     )
+    if answer_intent(question) == 'procedure':
+        chunks = focused_procedures(chunks, question)
     understanding.is_cross_meeting = cross_meeting
     return chunks, understanding

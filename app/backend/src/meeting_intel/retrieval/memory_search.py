@@ -47,14 +47,35 @@ class InMemorySearchProvider(SearchProvider):
     async def index_chunks(self, chunks: list[IndexableChunk]) -> None:
         if not chunks:
             return
+        from .customer_metadata import bind_customers
+        chunks = bind_customers(chunks)
         with self._lock:
             for chunk in chunks:
                 key = (chunk.tenant_id, chunk.meeting_id)
                 self._store[key][chunk.id] = chunk
 
+    async def reuse_document(self, *, tenant_id, meeting_id, document_id, expected_count):
+        from .customer_metadata import bind_customers
+        from .local_index_cache import save, cache_path
+        with self._lock:
+            chunks = [c for c in self._store.get((tenant_id, meeting_id), {}).values()
+                      if c.document_id == document_id]
+        if len(chunks) < expected_count:
+            return False
+        await self.index_chunks(bind_customers(chunks))
+        if not cache_path(tenant_id, meeting_id, document_id).is_file():
+            await __import__('asyncio').to_thread(save, chunks)
+        return True
+
     async def delete_meeting(self, *, tenant_id: str, meeting_id: str) -> None:
         with self._lock:
             self._store.pop((tenant_id, meeting_id), None)
+
+    async def delete_document(self, *, tenant_id: str, meeting_id: str, document_id: str) -> None:
+        with self._lock:
+            bucket = self._store.get((tenant_id, meeting_id), {})
+            for key in [key for key, chunk in bucket.items() if chunk.document_id == document_id]:
+                del bucket[key]
 
     def _chunks_for_scope(self, tenant_id: str, meeting_ids: list[str]) -> list[IndexableChunk]:
         with self._lock:
@@ -70,11 +91,14 @@ class InMemorySearchProvider(SearchProvider):
             start_time=chunk.start_time, end_time=chunk.end_time, speaker_name=chunk.speaker_name, score=score,
             source_file=chunk.source_file, relative_path=chunk.relative_path, file_type=chunk.file_type,
             document_type=chunk.document_type, page_number=chunk.page_number, sheet_name=chunk.sheet_name,
-            slide_number=chunk.slide_number, section=chunk.section,
+            slide_number=chunk.slide_number, section=chunk.section, customer_id=chunk.customer_id,
         )
 
-    async def chunks_for_meeting(self, *, tenant_id: str, meeting_id: str) -> list[SearchHit]:
-        return [self._to_hit(c) for c in self._chunks_for_scope(tenant_id, [meeting_id])]
+    async def chunks_for_meeting(self, *, tenant_id: str, meeting_id: str, customer_id: str | None = None,
+                                 document_ids: list[str] | None = None) -> list[SearchHit]:
+        return [self._to_hit(c) for c in self._chunks_for_scope(tenant_id, [meeting_id])
+                if (customer_id is None or c.customer_id == customer_id)
+                and (document_ids is None or c.document_id in document_ids)]
 
     async def keyword_search(
         self, *, tenant_id: str, meeting_ids: list[str], query: str, speaker: str | None = None, top_k: int
@@ -112,14 +136,16 @@ class InMemorySearchProvider(SearchProvider):
         speaker: str | None = None,
         top_k: int,
         document_id: str | None = None,
+        customer_id: str | None = None,
     ) -> list[SearchHit]:
         if not meeting_ids:
             return []
-        if document_id is not None:
+        if document_id is not None or customer_id is not None:
             scoped = InMemorySearchProvider()
             await scoped.index_chunks([
                 c for c in self._chunks_for_scope(tenant_id, meeting_ids)
-                if c.document_id == document_id
+                if (document_id is None or c.document_id == document_id)
+                and (customer_id is None or c.customer_id == customer_id)
             ])
             return await scoped.hybrid_search(
                 tenant_id=tenant_id, meeting_ids=meeting_ids, query=query,

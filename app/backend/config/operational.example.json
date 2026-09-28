@@ -1,0 +1,16 @@
+{
+  "customers": [
+    {
+      "id": "bp",
+      "name": "British Petroleum",
+      "aliases": ["BP"],
+      "tenant_id": "REPLACE_WITH_TENANT_ID",
+      "meeting_ids": ["REPLACE_WITH_MEETING_ID"],
+      "user_ids": [],
+      "roles": {},
+      "timezone": "UTC"
+    }
+  ],
+  "records": [],
+  "document_bindings": []
+}
