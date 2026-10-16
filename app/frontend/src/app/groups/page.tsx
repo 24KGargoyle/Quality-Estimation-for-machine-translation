@@ -10,6 +10,7 @@ import { GroupSummary } from "@/lib/types";
 function GroupsContent() {
   const [groups, setGroups] = useState<GroupSummary[]>([]);
   const [name, setName] = useState("");
+  const [search, setSearch] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -56,25 +57,36 @@ function GroupsContent() {
         Team conversations with each other and the AI — discuss shared meeting context, decide, and track action items.
       </p>
 
-      <form onSubmit={handleCreate} className="mt-6 flex gap-2">
+      <div className="mt-6 flex flex-wrap items-center gap-2">
         <input
-          className="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-sm"
-          aria-label="New group name…" placeholder="New group name…"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
+          className="min-w-[180px] flex-1 rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm"
+          type="search"
+          aria-label="Search groups"
+          placeholder="Search groups…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
         />
-        <button
-          type="submit"
-          disabled={busy}
-          className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-        >
-          Create
-        </button>
-      </form>
+        <form onSubmit={handleCreate} className="flex min-w-0 flex-[1.2] gap-2">
+          <input
+            className="min-w-[150px] flex-1 rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm"
+            aria-label="New group name"
+            placeholder="New group name…"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+          <button
+            type="submit"
+            disabled={busy || !name.trim()}
+            className="shrink-0 rounded-md bg-blue-700 px-5 py-2 text-sm font-medium text-white hover:bg-blue-800 disabled:opacity-50"
+          >
+            {busy ? "Creating…" : "Create"}
+          </button>
+        </form>
+      </div>
       {error && <p role="alert" className="mt-3 text-sm text-red-600">{error}</p>}
 
       <div className="mt-6 space-y-2">
-        {groups.map((g) => (
+        {groups.filter((g) => g.name.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())).map((g) => (
           <div key={g.id} className="flex items-center gap-3 rounded-lg border border-neutral-200 bg-white px-4 py-3">
           <Link
             href={`/groups/${g.id}`}
@@ -91,6 +103,8 @@ function GroupsContent() {
           </div>
         ))}
         {groups.length === 0 && <p className="text-sm text-neutral-400">No groups yet.</p>}
+        {groups.length > 0 && !groups.some((g) => g.name.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())) &&
+          <p className="text-sm text-neutral-400">No groups match “{search.trim()}”.</p>}
       </div>
     </div>
   );

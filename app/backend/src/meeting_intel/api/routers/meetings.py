@@ -14,12 +14,22 @@ from meeting_intel.api.schemas import (
 )
 from meeting_intel.auth.deps import RequestContext, get_current_context
 from meeting_intel.auth.entra import GraphNotConfiguredError
-from meeting_intel.db.models import HistoricalDocument, Meeting, MeetingParticipant
+from meeting_intel.db.models import HistoricalDocument, Meeting, MeetingParticipant, MeetingStatus
 from meeting_intel.db.session import get_db
 from meeting_intel.ingestion.pipeline import load_meeting_from_graph, load_meeting_manual
 from meeting_intel.security.authz import audit, get_authorized_meeting
 
 router = APIRouter(prefix="/api/meetings", tags=["meetings"])
+
+
+def _display_status(meeting: Meeting, document_count: int) -> str:
+    # Older historical imports left document-only meetings pending because
+    # only transcript files advanced their status. These meetings are usable
+    # for document search, but do not have a transcript to index.
+    if (meeting.status == MeetingStatus.pending and meeting.is_historical
+            and document_count > 0 and not meeting.transcript_available):
+        return MeetingStatus.no_transcript.value
+    return meeting.status.value
 
 
 @router.get("/{meeting_id}/customers")
@@ -114,7 +124,7 @@ async def _to_detail(db: AsyncSession, meeting: Meeting) -> MeetingDetail:
         participant_count=len(participants),
         transcript_available=meeting.transcript_available,
         recording_available=meeting.recording_available,
-        status=meeting.status.value,
+        status=_display_status(meeting, len(documents)),
         is_historical=meeting.is_historical,
         document_count=len(documents),
         participants=[{"display_name": p.display_name, "role": p.role.value} for p in participants],
@@ -183,7 +193,7 @@ async def list_meetings(
                 participant_count=len(count),
                 transcript_available=m.transcript_available,
                 recording_available=m.recording_available,
-                status=m.status.value,
+                status=_display_status(m, len(doc_count)),
                 is_historical=m.is_historical,
                 document_count=len(doc_count),
             )

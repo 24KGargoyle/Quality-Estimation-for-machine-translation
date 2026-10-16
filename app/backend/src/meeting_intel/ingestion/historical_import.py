@@ -32,7 +32,9 @@ from meeting_intel.db.models import (
     ImportFileStatus,
     ImportJobStatus,
     Meeting,
+    MeetingParticipant,
     MeetingStatus,
+    ParticipantRole,
 )
 from meeting_intel.db.session import SessionLocal
 from meeting_intel.ingestion.documents import NormalizedDocument, UnsupportedFileError
@@ -289,6 +291,30 @@ async def _process_one(job_id: str, tenant_id: str, user_id: str, staged: Staged
                     if any(d.end_time is not None for d in result.documents):
                         max_end = max((d.end_time or 0.0 for d in result.documents), default=0.0)
                         meeting.duration_seconds = int(max(meeting.duration_seconds or 0, max_end))
+                    transcript_speakers = {
+                        d.speaker.strip()
+                        for d in result.documents
+                        if d.document_type == "transcript" and d.speaker and d.speaker.strip()
+                    }
+                    existing_speakers = {
+                        name.casefold()
+                        for name in (await db.execute(
+                            select(MeetingParticipant.display_name).where(
+                                MeetingParticipant.meeting_id == meeting.id
+                            )
+                        )).scalars()
+                    }
+                    for speaker in transcript_speakers:
+                        if speaker.casefold() not in existing_speakers:
+                            db.add(MeetingParticipant(
+                                meeting_id=meeting.id,
+                                display_name=speaker,
+                                role=ParticipantRole.attendee,
+                            ))
+                elif meeting.status != MeetingStatus.ready and not meeting.transcript_available:
+                    # Imported non-transcript documents are still searchable,
+                    # but they cannot make this meeting transcript-ready.
+                    meeting.status = MeetingStatus.no_transcript
 
                 db.add(ImportedFileResult(
                     import_job_id=job_id, filename=staged.filename, relative_path=staged.relative_path,

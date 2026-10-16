@@ -19,6 +19,12 @@ function statusBadge(status: string) {
   return styles[status] || styles.pending;
 }
 
+function statusLabel(meeting: MeetingSummary) {
+  if (meeting.status === "no_transcript" && meeting.document_count > 0) return "documents only";
+  if (meeting.status === "no_transcript") return "no transcript";
+  return meeting.status.replaceAll("_", " ");
+}
+
 function MeetingsContent() {
   const router = useRouter();
   const [meetings, setMeetings] = useState<MeetingSummary[]>([]);
@@ -147,11 +153,13 @@ function MeetingsContent() {
             <div>
               <div className="text-sm font-medium">{m.title}</div>
               <div className="text-xs text-neutral-500">
-                Meeting ID {m.ms_meeting_id} · {m.participant_count} participants
+                Meeting ID {m.ms_meeting_id} · {m.is_historical
+                  ? `${m.document_count} documents${m.participant_count ? ` · ${m.participant_count} participants` : ""}`
+                  : `${m.participant_count} participants`}
                 {m.duration_seconds ? ` · ${Math.round(m.duration_seconds / 60)} min` : ""}
               </div>
             </div>
-            <span className={`rounded-full px-2 py-0.5 text-xs ${statusBadge(m.status)}`}>{m.status}</span>
+            <span className={`rounded-full px-2 py-0.5 text-xs ${statusBadge(m.status)}`}>{statusLabel(m)}</span>
           </Link>
           <button
             type="button"
