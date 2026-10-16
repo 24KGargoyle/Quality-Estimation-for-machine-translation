@@ -26,13 +26,15 @@ additive migration. No Azure resources are provisioned by this change.
 
 ## Customer resolution
 
-The stored conversation customer wins, then the optional `customer_id` request
-field, then an explicitly named account, then a unique meeting/user association.
-An ambiguous or unavailable account produces a selection request without retrieval.
-The existing chat UI can select by naming the account in the message. Start a new
-conversation to switch accounts. Roles come from the catalog's `roles` mapping of
-authenticated user ID to operational role, not the application's admin/member role.
-Timezone is configured per customer and the date is derived at request time.
+An explicitly named authorized customer wins, then an explicit `customer_id`
+selection, then the stored conversation customer. Meeting/user association grants
+selection eligibility but does not silently select an active customer.
+An unresolved customer produces `Which customer are you asking about?` when no
+customer context is available, without retrieval. Naming a different authorized
+customer switches the conversation's active customer. Roles come from the catalog's
+`roles` mapping of authenticated user ID to operational role, not the application's
+admin/member role. Timezone is configured per customer and the date is derived at
+request time.
 
 General questions use the existing retriever with tenant, authorized meeting and
 customer filters applied before ranking. Prior unscoped conversation history is
@@ -44,8 +46,9 @@ evidence; its extra meeting-wide search and external web research are suppressed
 ### Answering directly from uploads
 
 Set `OPERATIONAL_UPLOADED_EVIDENCE_ENABLED=true` to use uploaded reference documents
-for procedures, account facts and daily checklists when there are no approved
-records on that route. Keep document/customer bindings explicit: a mixed upload
+for account facts and daily checklists when there are no approved records on that
+route. Procedure questions require a current approved/active SOP record. Keep
+document/customer bindings explicit: a mixed upload
 folder is not proof that every file belongs to the same customer.
 
 Configure `uploaded_sources` on the customer, mapping `PROCEDURE`, `ACCOUNT_INFO`
@@ -79,11 +82,12 @@ automatically mark it approved. The catalog is validated on every operational
 request. A missing or malformed catalog fails closed.
 
 Each record has `id`, `tenant_id`, `customer_id`, `source_type`, `title`, `topic`,
-`status`, `version`, `effective_date`, optional `expires_on`, `owner` and
-`authority_level`. Only approved records with authority at least
+`status`, `version`, `effective_date`, optional `last_updated`, optional `expires_on`, `owner` and
+`authority_level`. Only approved or active records with authority at least
 `OPERATIONAL_MIN_AUTHORITY` (default 80) and an effective
 date on or before today are eligible. Numeric dotted versions are supported.
-Newest effective date/version wins; equal-ranked duplicates abstain. An expired
+Newest effective date/version wins, with `last_updated` resolving tied versions;
+unresolved equal-ranked duplicates abstain. An expired
 latest version does not revive an older one. An optional `document_id` links a
 record to a selected imported document (`hist:<first 16 hash characters>`).
 
@@ -126,8 +130,11 @@ format is `%Y-%m-%d`; set `date_format` explicitly for other formats.
 Each file must belong exclusively to the declared customer, or map `customer_id`
 to its customer discriminator column. Mixed-customer rows are filtered before
 computation. Missing columns and invalid dates abstain, rather than undercounting.
-“How many SOWs expire in September?” is supported directly, with an optional year.
-If matching months span multiple years and no year was supplied, it abstains.
+Named months without a year resolve to the next applicable occurrence, including
+the current month. Relative date ranges support today, this week, this month, next
+month, month-end business days, upcoming/expiring soon and overdue. Configure
+`MONTH_END_BUSINESS_DAYS` and `UPCOMING_DAYS` when defaults need adjustment. Results
+include the resolved period and list up to ten matching records.
 
 For other questions, add exact approved query mappings in a record's `queries`:
 
@@ -155,7 +162,8 @@ this initial adapter is intended for bounded operational rosters, not large anal
 
 ## Task schedules
 
-Use `source_type: task_schedule`, one stable `topic` per task, an `answer` with the
+Use `source_type: task_schedule`, `reporting`, `reporting_calendar`, or
+`operational_calendar`, one stable `topic` per task, an `answer` with the
 complete reviewed instruction and optional `role`. `frequency` is `daily`,
 `weekly` (with `weekday`, Monday=0), `monthly` (with `day`), or `date` (with
 `on_date`). Version and validity rules apply to schedules too. Missing role context

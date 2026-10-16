@@ -43,7 +43,7 @@ function MeetingWorkspace() {
     if (!conversationId) return;
     api
       .get<ConversationDetail>(`/api/conversations/${conversationId}`)
-      .then((c) => setMessages(c.messages))
+      .then((c) => { setMessages(c.messages); })
       .catch(() => setError("Could not load conversation history. Refresh to try again."));
   }, [conversationId]);
 
@@ -76,7 +76,9 @@ function MeetingWorkspace() {
       const conv = await api.get<ConversationDetail>(`/api/conversations/${res.conversation_id}`);
       setMessages(conv.messages);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to get an answer");
+      console.error("Meeting assistant request failed", err);
+      setInput(question);
+      setError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Failed to get an answer");
     } finally {
       setSending(false);
     }

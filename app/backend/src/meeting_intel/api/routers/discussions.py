@@ -1,4 +1,5 @@
 from html import escape
+import re
 import httpx
 from meeting_intel.graph.client import GraphNotConfiguredError, GraphMeetingNotFoundError, GraphTransientError
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -203,11 +204,31 @@ def teams_errors(handler):
     return guarded
 
 
-def _resolved_to_schema(p) -> ResolvedParticipantSchema:
+def _resolved_to_schema(p, *, relevant=False) -> ResolvedParticipantSchema:
     return ResolvedParticipantSchema(
         display_name=p.display_name, user_id=p.user_id, email=p.email, role=p.role,
-        source=p.source, resolved=p.resolved,
+        source=p.source, resolved=p.resolved, relevant=relevant,
     )
+
+
+async def _relevant_attendees(db, *, ctx, meeting, message_id, participants):
+    """Derive proposed people only from the user's own answer and cited evidence."""
+    answer = (await db.execute(select(Message).join(Conversation, Message.conversation_id == Conversation.id).where(
+        Message.id == message_id, Message.meeting_id == meeting.id,
+        Message.role == MessageRole.assistant, Conversation.user_id == ctx.user.id,
+        Conversation.tenant_id == ctx.tenant_id, Conversation.meeting_id == meeting.id,
+    ))).scalar_one_or_none()
+    if answer is None:
+        raise HTTPException(404, 'Answer not found in your meeting conversation.')
+    sources = (await db.execute(select(AISource).join(AIResponse, AISource.ai_response_id == AIResponse.id)
+        .where(AIResponse.message_id == answer.id))).scalars().all()
+    corpus = '\n'.join([answer.content, *(s.excerpt for s in sources), *(s.speaker or '' for s in sources)]).casefold()
+    relevant = set()
+    for person in participants:
+        name = person.display_name.strip()
+        if name and re.search(r'(?<!\w)' + re.escape(name.casefold()) + r'(?!\w)', corpus):
+            relevant.add(person.user_id or f'name:{name.casefold()}')
+    return relevant
 
 
 async def _bind_teams_chat_to_group(
@@ -244,7 +265,10 @@ async def find_teams_group(
         resolved = await MeetingParticipantResolver().resolve(db, meeting=meeting)
     except (GraphNotConfiguredError, GraphMeetingNotFoundError, GraphTransientError, httpx.HTTPError):
         raise HTTPException(503, "Teams attendance is unavailable. Check Graph permissions and try again.") from None
-    participants_schema = [_resolved_to_schema(p) for p in resolved]
+    relevant = await _relevant_attendees(db, ctx=ctx, meeting=meeting,
+                                         message_id=payload.message_id, participants=resolved)
+    participants_schema = [_resolved_to_schema(p, relevant=(p.user_id or f'name:{p.display_name.casefold()}') in relevant)
+                           for p in resolved]
 
     if not settings.graph_configured:
         return FindTeamsGroupResponse(
@@ -260,10 +284,12 @@ async def find_teams_group(
 
     from meeting_intel.graph.client import get_graph_client
 
-    target_ids = {p.user_id for p in resolved if p.resolved and p.user_id}
+    target_ids = {p.user_id for p in resolved if p.resolved and p.user_id
+                  and (p.user_id or f'name:{p.display_name.casefold()}') in relevant}
     chats = await get_graph_client().list_my_group_chats(token)
     target_ids.add(ctx.user.ms_object_id)
-    match = find_matching_chat(chats, target_ids) if resolved and all(p.resolved for p in resolved) else None
+    relevant_people = [p for p in resolved if (p.user_id or f'name:{p.display_name.casefold()}') in relevant]
+    match = find_matching_chat(chats, target_ids) if target_ids and relevant_people and all(p.resolved for p in relevant_people) else None
 
     existing_group_id = None
     matched_schema = None
@@ -299,7 +325,10 @@ async def create_teams_group(
         resolved = await MeetingParticipantResolver().resolve(db, meeting=meeting)
     except (GraphNotConfiguredError, GraphMeetingNotFoundError, GraphTransientError, httpx.HTTPError):
         raise HTTPException(503, "Teams attendance is unavailable. Check Graph permissions and try again.") from None
-    authorized_ids = {p.user_id for p in resolved if p.resolved and p.user_id}
+    relevant = await _relevant_attendees(db, ctx=ctx, meeting=meeting,
+                                         message_id=payload.message_id, participants=resolved)
+    authorized_ids = {p.user_id for p in resolved if p.resolved and p.user_id
+                      and (p.user_id or f'name:{p.display_name.casefold()}') in relevant}
 
     requested = set(payload.participant_user_ids)
     if not requested or not requested.issubset(authorized_ids):
@@ -389,7 +418,10 @@ async def send_teams_discussion(
     if len(member_ids) != len(members) or member_ids != set(payload.recipient_user_ids):
         raise HTTPException(409, "Chat membership changed. Review the recipients again before sending.")
     resolved = await MeetingParticipantResolver().resolve(db, meeting=meeting)
-    allowed = {p.user_id for p in resolved if p.resolved and p.user_id} | {ctx.user.ms_object_id}
+    relevant = await _relevant_attendees(db, ctx=ctx, meeting=meeting,
+                                         message_id=payload.message_id, participants=resolved)
+    allowed = {p.user_id for p in resolved if p.resolved and p.user_id
+               and (p.user_id or f'name:{p.display_name.casefold()}') in relevant} | {ctx.user.ms_object_id}
     if not member_ids.issubset(allowed):
         raise HTTPException(403, "Chat contains recipients not resolved for this meeting.")
 

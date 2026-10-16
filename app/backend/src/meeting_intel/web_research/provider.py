@@ -29,7 +29,10 @@ def should_research_web(query: str) -> bool:
     q = query.lower()
     if any(p in q for p in _PERSON_QUESTION_PATTERNS):
         return False
-    return ("search the web" in q or "web research" in q) and any(w in q for w in _RESEARCH_TRIGGER_WORDS)
+    explicit_web = any(phrase in q for phrase in (
+        "search the web", "search online", "web search", "web research", "look online",
+    ))
+    return explicit_web
 
 
 def extract_research_topic(query: str) -> str:

@@ -40,7 +40,7 @@ export default function TeamsDiscussModal({
 
   useEffect(() => {
     api
-      .post<FindTeamsGroupResponse>("/api/discussions/find-teams-group", { meeting_id: meetingId })
+      .post<FindTeamsGroupResponse>("/api/discussions/find-teams-group", { meeting_id: meetingId, message_id: messageId })
       .then((res) => {
         setFind(res);
         if (!res.teams_available) {
@@ -48,7 +48,7 @@ export default function TeamsDiscussModal({
         } else if (res.existing_group) {
           setStep("existing");
         } else {
-          setSelected(new Set(res.participants.filter((p) => p.resolved && p.user_id).map((p) => p.user_id!)));
+          setSelected(new Set(res.participants.filter((p) => p.relevant && p.resolved && p.user_id).map((p) => p.user_id!)));
           setStep("create");
         }
       })
@@ -189,7 +189,7 @@ export default function TeamsDiscussModal({
 
         {step === "create" && (
           <div className="mt-3 space-y-3">
-            <p className="text-xs text-neutral-500">No existing Teams group was found for the meeting participants.</p>
+            <p className="text-xs text-neutral-500">Proposed participants are people referenced in the answer and its cited evidence. Review the list before creating a group.</p>
             <div>
               <label htmlFor="teams-topic" className="mb-1 block text-xs font-medium text-neutral-500">Topic</label>
               <input
@@ -200,7 +200,7 @@ export default function TeamsDiscussModal({
               />
             </div>
             <div>
-              <div className="text-xs font-medium text-neutral-500">Participants</div>
+              <div className="text-xs font-medium text-neutral-500">Proposed participants</div>
               <ul className="mt-1 max-h-40 space-y-1 overflow-y-auto">
                 {resolvableParticipants.map((p) => (
                   <li key={p.user_id}>
@@ -227,7 +227,7 @@ export default function TeamsDiscussModal({
               disabled={selected.size === 0}
               className="w-full rounded-md bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
             >
-              Create Teams Group
+              Review group creation
             </button>
           </div>
         )}

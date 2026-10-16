@@ -41,6 +41,11 @@ export interface MeetingDetail extends MeetingSummary {
   documents: HistoricalDocumentSchema[];
 }
 
+export interface CustomerOption {
+  id: string;
+  name: string;
+}
+
 export interface SourceSchema {
   speaker: string | null;
   start_timestamp: string | null;
@@ -86,6 +91,7 @@ export interface IntelligencePanel {
 
 export interface ChatResponse {
   conversation_id: string;
+  customer_id: string | null;
   message_id: string;
   answer: string;
   evidence_sufficient: boolean;
@@ -107,6 +113,7 @@ export interface MessageSchema {
 export interface ConversationSummary {
   id: string;
   meeting_id: string | null;
+  customer_id: string | null;
   title: string;
   updated_at: string;
 }
@@ -220,6 +227,7 @@ export interface ResolvedParticipant {
   role: string;
   source: string;
   resolved: boolean;
+  relevant: boolean;
 }
 
 export interface MatchedChat {

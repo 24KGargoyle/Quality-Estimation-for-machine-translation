@@ -103,6 +103,8 @@ class Settings(BaseSettings):
     operational_catalog_path: str = "config/operational.json"
     operational_min_authority: int = 80
     operational_uploaded_evidence_enabled: bool = False
+    month_end_business_days: int = 5
+    upcoming_days: int = 7
 
     # --- Web Research (Related Intelligence sidebar) ---
     # "none" (default): the sidebar's Web Research section is always empty,

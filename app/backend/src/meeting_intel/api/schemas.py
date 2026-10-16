@@ -145,6 +145,7 @@ class IntelligencePanelSchema(BaseModel):
 
 class ChatResponse(BaseModel):
     conversation_id: str
+    customer_id: str | None = None
     message_id: str
     answer: str
     evidence_sufficient: bool
@@ -158,6 +159,7 @@ class ChatResponse(BaseModel):
 class ConversationSummary(BaseModel):
     id: str
     meeting_id: str | None
+    customer_id: str | None = None
     title: str
     updated_at: datetime
 
@@ -318,6 +320,7 @@ class ResolvedParticipantSchema(BaseModel):
     role: str
     source: str
     resolved: bool
+    relevant: bool = False
 
 
 class MatchedChatSchema(BaseModel):
@@ -330,6 +333,7 @@ class MatchedChatSchema(BaseModel):
 
 class FindTeamsGroupRequest(BaseModel):
     meeting_id: str
+    message_id: str
 
 
 class FindTeamsGroupResponse(BaseModel):
@@ -343,6 +347,7 @@ class FindTeamsGroupResponse(BaseModel):
 class CreateTeamsGroupRequest(BaseModel):
     confirmed: Literal[True]
     meeting_id: str
+    message_id: str
     participant_user_ids: list[str] = Field(min_length=1)
     topic: str
 

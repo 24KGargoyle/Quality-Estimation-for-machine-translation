@@ -69,6 +69,8 @@ async def chat(
         )
         db.add(conversation)
         await db.flush()
+    original_conversation = conversation
+    original_customer_id = conversation.customer_id
 
     history_rows = (
         await db.execute(
@@ -77,15 +79,14 @@ async def chat(
     ).scalars().all()
     history = [{"role": m.role.value, "content": m.content} for m in history_rows]
 
-    db.add(
-        Message(
+    user_message = Message(
             conversation_id=conversation.id,
             sender_user_id=ctx.user.id,
             role=MessageRole.user,
             content=payload.message,
             meeting_id=meeting.id,
         )
-    )
+    db.add(user_message)
     # Persist the question before slow retrieval/model work; release SQLite writer lock.
     await db.commit()
 
@@ -105,7 +106,27 @@ async def chat(
                     question=payload.message, document=document,
                 )
     except ImportedContentUnavailableError as exc:
-        raise HTTPException(503, str(exc)) from exc
+        from meeting_intel.agents.answer_agent import AnswerResult
+        result = AnswerResult(
+            text=("This document is not available in the knowledge base yet. Please confirm that it was uploaded "
+                  "to the correct customer location and has completed processing/approval."),
+            evidence_sufficient=False,
+        )
+
+    # A customer switch starts a fresh private thread. Keep the prior account's
+    # conversation intact and never display or persist mixed-customer turns.
+    if (get_settings().operational_enabled and original_customer_id
+            and conversation.customer_id and conversation.customer_id != original_customer_id):
+        switched_customer_id = conversation.customer_id
+        original_conversation.customer_id = original_customer_id
+        conversation = Conversation(
+            tenant_id=ctx.tenant_id, user_id=ctx.user.id, meeting_id=meeting.id,
+            kind=ConversationKind.private_meeting, title=meeting.title,
+            customer_id=switched_customer_id,
+        )
+        db.add(conversation)
+        await db.flush()
+        user_message.conversation_id = conversation.id
 
     assistant_message = Message(
         conversation_id=conversation.id,
@@ -190,6 +211,7 @@ async def chat(
 
     return ChatResponse(
         conversation_id=conversation.id,
+        customer_id=conversation.customer_id,
         message_id=assistant_message.id,
         answer=result.text,
         evidence_sufficient=result.evidence_sufficient,

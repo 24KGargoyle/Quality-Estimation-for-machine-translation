@@ -34,7 +34,14 @@ def execute(rows, plan: QueryPlan, columns: dict[str, str], date_format='%Y-%m-%
         if raw is None:
             raise ValueError('missing_value')
         if kind == 'date':
-            return raw.date() if isinstance(raw, datetime) else raw if isinstance(raw, date) else datetime.strptime(str(raw), date_format).date()
+            if isinstance(raw, datetime):
+                return raw.date()
+            if isinstance(raw, date):
+                return raw
+            try:
+                return datetime.strptime(str(raw), date_format).date()
+            except (TypeError, ValueError):
+                raise ValueError('invalid_date') from None
         if kind == 'number':
             try:
                 number = Decimal(str(raw))

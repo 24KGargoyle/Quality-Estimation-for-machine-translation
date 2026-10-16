@@ -11,8 +11,9 @@ from meeting_intel.retrieval.restore_imports import restore_imports
 
 def fallback(customer, question):
     contact = customer.sme or f'the {customer.name} account SME or account manager'
-    return AnswerResult(text=f"I couldn't find the requested information in the uploaded {customer.name} documents. "
-                             f"Please contact {contact}.", evidence_sufficient=False, retrieval_query=question)
+    return AnswerResult(text=("I don't have enough information to answer this accurately.\n\n"
+                              "Missing: a customer-authorized, sufficiently current source that answers the request.\n\n"
+                              f"Contact: {contact}"), evidence_sufficient=False, retrieval_query=question)
 
 
 def daily_checklist(chunks, *, customer, today: date, role=None):

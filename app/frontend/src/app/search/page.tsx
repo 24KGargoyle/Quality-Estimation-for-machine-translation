@@ -6,7 +6,7 @@ import RequireAuth from "@/components/RequireAuth";
 import IntelligencePanel from "@/components/IntelligencePanel";
 import { api } from "@/lib/api";
 import { highlightEvidence } from "@/lib/highlight";
-import { IntelligencePanel as IntelligencePanelData, MeetingSummary, SearchResult } from "@/lib/types";
+import { CustomerOption, IntelligencePanel as IntelligencePanelData, MeetingSummary, SearchResult } from "@/lib/types";
 
 function fmtTs(seconds: number) {
   const m = Math.floor(seconds / 60);
@@ -28,6 +28,8 @@ function resultLabel(r: SearchResult): string {
 function SearchContent() {
   const [meetings, setMeetings] = useState<MeetingSummary[]>([]);
   const [meetingId, setMeetingId] = useState("");
+  const [customers, setCustomers] = useState<CustomerOption[]>([]);
+  const [customerId, setCustomerId] = useState("");
   const [query, setQuery] = useState("");
   const [lastQuery, setLastQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -42,6 +44,13 @@ function SearchContent() {
     }).catch(() => setError("Could not load meetings. Refresh to try again."));
   }, []);
 
+  useEffect(() => {
+    setCustomerId("");
+    if (!meetingId) { setCustomers([]); return; }
+    api.get<CustomerOption[]>(`/api/meetings/${meetingId}/customers`)
+      .then(setCustomers).catch(() => setError("Could not load authorized customer accounts."));
+  }, [meetingId]);
+
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault();
     if (!meetingId || !query.trim()) return;
@@ -49,8 +58,8 @@ function SearchContent() {
     setBusy(true);
     try {
       const [searchRes, intelRes] = await Promise.all([
-        api.get<SearchResult[]>(`/api/meetings/${meetingId}/search?q=${encodeURIComponent(query)}`),
-        api.get<IntelligencePanelData>(`/api/meetings/${meetingId}/intelligence?q=${encodeURIComponent(query)}`),
+        api.get<SearchResult[]>(`/api/meetings/${meetingId}/search?q=${encodeURIComponent(query)}${customerId ? `&customer_id=${encodeURIComponent(customerId)}` : ""}`),
+        api.get<IntelligencePanelData>(`/api/meetings/${meetingId}/intelligence?q=${encodeURIComponent(query)}${customerId ? `&customer_id=${encodeURIComponent(customerId)}` : ""}`),
       ]);
       setResults(searchRes);
       setIntelligence(intelRes);
@@ -79,6 +88,12 @@ function SearchContent() {
             </option>
           ))}
         </select></div>
+        {customers.length > 0 && <div className="search-scope"><label htmlFor="search-customer">CUSTOMER</label>
+          <select id="search-customer" aria-label="Customer to search" className="rounded-md border border-neutral-300 px-3 py-2 text-sm"
+            value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
+            <option value="">Which customer?</option>
+            {customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}</option>)}
+          </select></div>}
         <div className="search-query"><Icon name="search" size={22} />
         <input
           className="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-sm"

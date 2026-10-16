@@ -22,6 +22,29 @@ from meeting_intel.security.authz import audit, get_authorized_meeting
 router = APIRouter(prefix="/api/meetings", tags=["meetings"])
 
 
+@router.get("/{meeting_id}/customers")
+async def meeting_customers(
+    meeting_id: str, ctx: RequestContext = Depends(get_current_context),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict[str, str]]:
+    """List only customers explicitly authorized for this meeting or user."""
+    meeting = await get_authorized_meeting(db, user=ctx.user, meeting_id=meeting_id)
+    from meeting_intel.config import get_settings
+    if not get_settings().operational_enabled:
+        return []
+    from pathlib import Path
+    from meeting_intel.operational import Catalog
+    from meeting_intel.folder_customer import folder_catalog
+    try:
+        catalog = Catalog.model_validate_json(Path(get_settings().operational_catalog_path).read_text(encoding='utf-8'))
+        catalog = await folder_catalog(db, catalog, tenant_id=ctx.tenant_id, meeting_id=meeting.id)
+    except (ValueError, OSError):
+        raise HTTPException(503, 'Customer configuration is unavailable') from None
+    allowed = [c for c in catalog.customers if c.tenant_id == ctx.tenant_id
+               and (meeting.id in c.meeting_ids or ctx.user.id in c.user_ids)]
+    return [{'id': c.id, 'name': c.name} for c in allowed]
+
+
 @router.delete("/{meeting_id}")
 async def delete_meeting(
     meeting_id: str, ctx: RequestContext = Depends(get_current_context), db: AsyncSession = Depends(get_db),
