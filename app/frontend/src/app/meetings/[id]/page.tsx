@@ -9,7 +9,7 @@ import { IntelligencePanel as IntelligenceData } from "@/lib/types";
 import Conversation, { ConversationHandle } from "@/components/Conversation";
 import ChatMessage from "@/components/ChatMessage";
 import { api, ApiError } from "@/lib/api";
-import { ChatResponse, ConversationDetail, MeetingDetail, MessageSchema } from "@/lib/types";
+import { ChatResponse, ConversationDetail, CustomerOption, MeetingDetail, MessageSchema } from "@/lib/types";
 
 function fmtDuration(seconds: number | null) {
   if (!seconds) return "Unknown";
@@ -23,6 +23,8 @@ function MeetingWorkspace() {
   const meetingId = params.id;
 
   const [meeting, setMeeting] = useState<MeetingDetail | null>(null);
+  const [customers, setCustomers] = useState<CustomerOption[]>([]);
+  const [customerId, setCustomerId] = useState("");
   const [conversationId, setConversationId] = useState<string | null>(
     searchParams.get("conversation")
   );
@@ -40,10 +42,18 @@ function MeetingWorkspace() {
   }, [meetingId]);
 
   useEffect(() => {
+    let active = true;
+    api.get<CustomerOption[]>(`/api/meetings/${meetingId}/customers`)
+      .then((options) => { if (active) setCustomers(options); })
+      .catch(() => { if (active) setError("Could not load authorized customer accounts."); });
+    return () => { active = false; };
+  }, [meetingId]);
+
+  useEffect(() => {
     if (!conversationId) return;
     api
       .get<ConversationDetail>(`/api/conversations/${conversationId}`)
-      .then((c) => { setMessages(c.messages); })
+      .then((c) => { setMessages(c.messages); setCustomerId(c.customer_id ?? ""); })
       .catch(() => setError("Could not load conversation history. Refresh to try again."));
   }, [conversationId]);
 
@@ -64,6 +74,7 @@ function MeetingWorkspace() {
     try {
       const res = await api.post<ChatResponse>("/api/chat", {
         meeting_id: meetingId,
+        customer_id: customerId || null,
         document_id: documentId || null,
         conversation_id: conversationId,
         message: question,
@@ -159,9 +170,33 @@ function MeetingWorkspace() {
 
         {notice && <p className="px-4 pb-1 text-xs text-blue-600">{notice}</p>}
         {error && <p role="alert" className="px-4 pb-1 text-xs text-red-600">{error}</p>}
-        {meeting.documents.length > 0 && (
-          <div className="answer-scope">
-            <label htmlFor="question-document" className="mb-1 block text-sm">Answer sources</label>
+        {(customers.length > 0 || meeting.documents.length > 0) && <div className="answer-scopes">
+          {customers.length > 0 && <div className="answer-scope-field">
+            <label htmlFor="question-customer">Client</label>
+            <select
+              id="question-customer"
+              aria-label="Client account for this conversation"
+              value={customerId}
+              disabled={sending}
+              onChange={(e) => {
+                const nextCustomerId = e.target.value;
+                setCustomerId(nextCustomerId);
+                setConversationId(null);
+                setMessages([]);
+                setIntelligence(null);
+                setError(null);
+                setNotice(null);
+              }}
+            >
+              <option value="">Auto-detect from meeting or question</option>
+              {customers.map((customer) => (
+                <option key={customer.id} value={customer.id}>{customer.name}</option>
+              ))}
+            </select>
+            <p>Only clients authorized for this meeting are listed.</p>
+          </div>}
+          {meeting.documents.length > 0 && <div className="answer-scope-field">
+            <label htmlFor="question-document">Answer sources</label>
             <select
               id="question-document"
               value={documentId}
@@ -174,16 +209,15 @@ function MeetingWorkspace() {
                 setError(null);
                 setNotice(null);
               }}
-              className="w-full rounded-md border border-neutral-300 bg-white p-2 text-sm"
             >
               <option value="">All documents in this meeting</option>
               {meeting.documents.map((doc) => (
                 <option key={doc.id} value={doc.id}>{doc.source_file}</option>
               ))}
             </select>
-            <p className="mt-1 text-xs text-neutral-500">Select a transcript to restrict answers and citations to that file.</p>
-          </div>
-        )}
+            <p>Select a transcript to restrict answers and citations to that file.</p>
+          </div>}
+        </div>}
         {!meeting.transcript_available && meeting.documents.length === 0 && (
           <p className="px-4 pb-2 text-xs text-amber-600">
             This meeting has no transcript indexed yet, so questions can&apos;t be answered from it.
